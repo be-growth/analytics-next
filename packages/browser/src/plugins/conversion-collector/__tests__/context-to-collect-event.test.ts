@@ -11,7 +11,7 @@ describe('contextToCollectEvent', () => {
         items: [{ id: 'item-1' }],
       },
       context: {
-        campaign: { source: 'google' },
+        campaign: { name: 'spring', medium: 'cpc', source: 'google' },
       },
       integrations: {
         Destination: { enabled: true },
@@ -35,7 +35,7 @@ describe('contextToCollectEvent', () => {
       items: [{ id: 'item-1' }],
     })
     expect(collectEvent?.context).toEqual({
-      campaign: { source: 'google' },
+      campaign: { name: 'spring', medium: 'cpc', source: 'google' },
     })
     expect(collectEvent?.integrations).toEqual({
       Destination: { enabled: true },
