@@ -74,6 +74,20 @@ const config = {
     new CircularDependencyPlugin({
       failOnError: true,
     }),
+    // AU-134: replace the full Segment.io delivery plugin with a light stub —
+    // the conversion SDK routes events through the conversion-collector plugin.
+    new webpack.NormalModuleReplacementPlugin(
+      /plugins[\\/]segmentio(?:[\\/]index)?(?:\.ts)?$/,
+      path.resolve(__dirname, 'src/conversion-sdk/stubs/segmentio-stub.ts')
+    ),
+    // AU-134: shared-dispatcher types follow the segmentio stub.
+    new webpack.NormalModuleReplacementPlugin(
+      /plugins[\\/]segmentio[\\/]shared-dispatcher(\.ts)?$/,
+      path.resolve(
+        __dirname,
+        'src/conversion-sdk/stubs/shared-dispatcher-stub.ts'
+      )
+    ),
     ...(includeGpt
       ? []
       : [
