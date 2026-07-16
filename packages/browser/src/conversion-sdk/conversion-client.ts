@@ -171,11 +171,12 @@ export class ConversionClient {
       traits
     )
     const taggedTraits = withOriginMarkers(normalizedTraits, this.config)
-    // Fix for the "identify with empty user_id" bug: when the caller omits userId,
-    // derive it from BGID (if present in traits) or SHA-256(email) instead of
-    // sending the event unidentified.
+    // Fix for the "identify with empty user_id" bug: when the caller omits userId
+    // (or passes whitespace-only), derive it from BGID (if present in traits) or
+    // SHA-256(email) instead of sending the event unidentified.
+    const trimmedUserId = userId?.trim()
     const resolvedUserId =
-      userId || (await deriveUserIdFromTraits(taggedTraits))
+      trimmedUserId || (await deriveUserIdFromTraits(taggedTraits))
     if (resolvedUserId) {
       await analytics.identify(resolvedUserId, taggedTraits, options)
       return
