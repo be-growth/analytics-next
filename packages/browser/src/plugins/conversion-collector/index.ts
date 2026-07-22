@@ -12,6 +12,7 @@ export {
   getConversionCollectorBuffer,
   registerConversionCollectorBuffer,
 } from './runtime-registry'
+export { appEnrichment } from './app-enrichment'
 export { clickIdEnrichment } from './enrichment/click-id-enrichment'
 export { sessionEnrichment } from './session-enrichment'
 export { conversionConsentEnrichment } from './enrichment/consent-enrichment'

@@ -1,4 +1,5 @@
 import { Plugin } from '../../core/plugin'
+import { appEnrichment } from './app-enrichment'
 import { clickIdEnrichment } from './enrichment/click-id-enrichment'
 import { conversionConsentEnrichment } from './enrichment/consent-enrichment'
 import { conversionContextEnrichment } from './enrichment/context-enrichment'
@@ -19,6 +20,7 @@ export function conversionPipelinePlugins(
 ): Plugin[] {
   const plugins: Plugin[] = [
     clickIdEnrichment(),
+    appEnrichment(settings),
     sessionEnrichment(settings),
     conversionCollectorPlugin(settings),
   ]
