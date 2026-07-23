@@ -1,5 +1,14 @@
+import {
+  describe,
+  expect,
+  it,
+  jest,
+  beforeEach,
+  afterEach,
+} from '@jest/globals'
 import { getOrCreateAnonymousId } from '../../plugins/conversion-collector/lib/session'
 import { isValidUuidV4 } from '../../plugins/conversion-collector/lib/uuid'
+import { sha256Hex } from '../../plugins/conversion-collector/identify/sha256'
 import {
   attachToWindow,
   bootstrapConversionAnalyticsFromWindow,
@@ -132,6 +141,43 @@ describe('Conversion SDK public API', () => {
     const body = JSON.parse(String(options?.body)) as CollectPayload
     expect(body[0]?.type).toBe('track')
     expect(body[0]?.userId).toBe('known-user')
+  })
+
+  it('derives user_id from SHA-256(email) and tags traits.navec when identify is called without a userId', async () => {
+    const expectedUserId = await sha256Hex('quiz@example.com')
+
+    await identify({ email: 'Quiz@Example.com' })
+    await flush()
+
+    expect(fetchCalls.length).toBe(1)
+    const [, options] = fetchCalls[0] as [
+      RequestInfo | URL,
+      RequestInit | undefined
+    ]
+    const body = JSON.parse(String(options?.body)) as CollectPayload
+    expect(body[0]?.type).toBe('identify')
+    expect(body[0]?.userId).toBe(expectedUserId)
+    expect(body[0]?.userId).not.toBe('')
+    expect(body[0]?.traits?.navec).toEqual({
+      source: 'conversion-pipeline-sdk',
+    })
+  })
+
+  it('normalizes whitespace-only userId by falling back to trait derivation', async () => {
+    const expectedUserId = await sha256Hex('user@example.com')
+
+    await identify('   ', { email: 'user@example.com' })
+    await flush()
+
+    expect(fetchCalls.length).toBe(1)
+    const [, options] = fetchCalls[0] as [
+      RequestInfo | URL,
+      RequestInit | undefined
+    ]
+    const body = JSON.parse(String(options?.body)) as CollectPayload
+    expect(body[0]?.type).toBe('identify')
+    expect(body[0]?.userId).toBe(expectedUserId)
+    expect(body[0]?.userId).not.toBe('   ')
   })
 
   it('uses the real event name and strips aliases from properties', async () => {
