@@ -1868,14 +1868,16 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   ConversionClient: () => (/* binding */ ConversionClient)
 /* harmony export */ });
 /* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! tslib */ 5478);
-/* harmony import */ var _plugins_conversion_collector_lib_session__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! ../plugins/conversion-collector/lib/session */ 6217);
+/* harmony import */ var _plugins_conversion_collector_lib_session__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! ../plugins/conversion-collector/lib/session */ 6217);
 /* harmony import */ var _collector_runtime__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./collector-runtime */ 4504);
 /* harmony import */ var _config__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./config */ 398);
 /* harmony import */ var _gpt_plugin__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./gpt-plugin */ 603);
 /* harmony import */ var _plugins_lotame_analytics__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ../plugins/lotame-analytics */ 7643);
+/* harmony import */ var _identity__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! ./identity */ 2706);
 /* harmony import */ var _lean_load__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./lean-load */ 9245);
 /* harmony import */ var _legacy_args__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./legacy-args */ 3753);
 /* harmony import */ var _write_key_config__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./write-key-config */ 6270);
+
 
 
 
@@ -2069,21 +2071,31 @@ var ConversionClient = /** @class */ (function () {
     };
     ConversionClient.prototype.identify = function (userOrEvent, traits, options) {
         return (0,tslib__WEBPACK_IMPORTED_MODULE_0__.__awaiter)(this, void 0, Promise, function () {
-            var analytics, _a, userId, normalizedTraits;
-            return (0,tslib__WEBPACK_IMPORTED_MODULE_0__.__generator)(this, function (_b) {
-                switch (_b.label) {
+            var analytics, _a, userId, normalizedTraits, taggedTraits, trimmedUserId, resolvedUserId, _b;
+            return (0,tslib__WEBPACK_IMPORTED_MODULE_0__.__generator)(this, function (_c) {
+                switch (_c.label) {
                     case 0: return [4 /*yield*/, this.ready()];
                     case 1:
-                        analytics = _b.sent();
+                        analytics = _c.sent();
                         _a = (0,_legacy_args__WEBPACK_IMPORTED_MODULE_7__.normalizeIdentifyCall)(userOrEvent, traits), userId = _a.userId, normalizedTraits = _a.traits;
-                        if (!userId) return [3 /*break*/, 3];
-                        return [4 /*yield*/, analytics.identify(userId, normalizedTraits, options)];
+                        taggedTraits = (0,_identity__WEBPACK_IMPORTED_MODULE_8__.withOriginMarkers)(normalizedTraits, this.config);
+                        trimmedUserId = userId === null || userId === void 0 ? void 0 : userId.trim();
+                        _b = trimmedUserId;
+                        if (_b) return [3 /*break*/, 3];
+                        return [4 /*yield*/, (0,_identity__WEBPACK_IMPORTED_MODULE_8__.deriveUserIdFromTraits)(taggedTraits)];
                     case 2:
-                        _b.sent();
-                        return [2 /*return*/];
-                    case 3: return [4 /*yield*/, analytics.identify(normalizedTraits, options)];
+                        _b = (_c.sent());
+                        _c.label = 3;
+                    case 3:
+                        resolvedUserId = _b;
+                        if (!resolvedUserId) return [3 /*break*/, 5];
+                        return [4 /*yield*/, analytics.identify(resolvedUserId, taggedTraits, options)];
                     case 4:
-                        _b.sent();
+                        _c.sent();
+                        return [2 /*return*/];
+                    case 5: return [4 /*yield*/, analytics.identify(taggedTraits, options)];
+                    case 6:
+                        _c.sent();
                         return [2 /*return*/];
                 }
             });
@@ -2114,7 +2126,7 @@ var ConversionClient = /** @class */ (function () {
         var _a, _b, _c, _d;
         return {
             endpoint: (_a = this.config.endpoint) !== null && _a !== void 0 ? _a : _config__WEBPACK_IMPORTED_MODULE_1__.DEFAULT_INIT_CONFIG.endpoint,
-            sessionId: (_d = (_c = (_b = this.config).getSessionId) === null || _c === void 0 ? void 0 : _c.call(_b)) !== null && _d !== void 0 ? _d : (0,_plugins_conversion_collector_lib_session__WEBPACK_IMPORTED_MODULE_8__.getCurrentSessionId)(),
+            sessionId: (_d = (_c = (_b = this.config).getSessionId) === null || _c === void 0 ? void 0 : _c.call(_b)) !== null && _d !== void 0 ? _d : (0,_plugins_conversion_collector_lib_session__WEBPACK_IMPORTED_MODULE_9__.getCurrentSessionId)(),
             queueSize: this.getQueueSize(),
             lastError: this.lastError,
         };
@@ -2153,6 +2165,74 @@ function conversionGptSlotEventsPlugin() {
         isLoaded: function () { return true; },
         load: function () { return Promise.resolve(); },
     };
+}
+
+
+/***/ }),
+
+/***/ 2706:
+/*!****************************************!*\
+  !*** ./src/conversion-sdk/identity.ts ***!
+  \****************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   deriveUserIdFromTraits: () => (/* binding */ deriveUserIdFromTraits),
+/* harmony export */   withOriginMarkers: () => (/* binding */ withOriginMarkers)
+/* harmony export */ });
+/* harmony import */ var _plugins_conversion_collector_identify_sha256__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../plugins/conversion-collector/identify/sha256 */ 9358);
+
+var BGID_TRAIT_KEYS = ['bgid', 'bgId', 'BGID'];
+var DEFAULT_NAVEC_SOURCE = 'conversion-pipeline-sdk';
+function asNonEmptyString(value) {
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+    var trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+}
+/**
+ * user_id = BGID (trait already resolved by the host, e.g. arbgid.com.br) when present,
+ * else SHA-256(trim(lowercase(email))) — no secret, deterministic across devices.
+ * Only used as a fallback when the caller does not pass an explicit userId to identify().
+ */
+function deriveUserIdFromTraits(traits) {
+    var _a;
+    for (var _i = 0, BGID_TRAIT_KEYS_1 = BGID_TRAIT_KEYS; _i < BGID_TRAIT_KEYS_1.length; _i++) {
+        var key = BGID_TRAIT_KEYS_1[_i];
+        var bgid = asNonEmptyString(traits[key]);
+        if (bgid) {
+            return Promise.resolve(bgid);
+        }
+    }
+    var rawEmail = (_a = asNonEmptyString(traits.email)) !== null && _a !== void 0 ? _a : asNonEmptyString(traits.email_hash);
+    if (!rawEmail) {
+        return Promise.resolve(undefined);
+    }
+    var normalized = rawEmail.toLowerCase();
+    if ((0,_plugins_conversion_collector_identify_sha256__WEBPACK_IMPORTED_MODULE_0__.isSha256Hex)(normalized)) {
+        return Promise.resolve(normalized);
+    }
+    return (0,_plugins_conversion_collector_identify_sha256__WEBPACK_IMPORTED_MODULE_0__.sha256Hex)(normalized).then(function (hash) { return hash || undefined; });
+}
+/**
+ * Tags identify traits with the data source (navec, + lotame when configured) so
+ * downstream consumers (ClickHouse) can tell where the identity data came from.
+ * Exact schema is a placeholder — `{ source }` — pending confirmation with the
+ * requester; callers can override by passing traits.navec / traits.lotame explicitly.
+ */
+function withOriginMarkers(traits, config) {
+    var _a;
+    var out = Object.assign({}, traits);
+    if (out.navec == null) {
+        out.navec = { source: (_a = config.navecSource) !== null && _a !== void 0 ? _a : DEFAULT_NAVEC_SOURCE };
+    }
+    if (config.lotameClientId && out.lotame == null) {
+        out.lotame = { source: 'lotame', clientId: config.lotameClientId };
+    }
+    return out;
 }
 
 

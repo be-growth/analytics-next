@@ -17,7 +17,28 @@ on:
   workflow_dispatch: # Allow manual trigger
 
 jobs:
+  # A suite E2E vive em segmentio/sdk-e2e-tests (repo privado da Segment).
+  # Sem E2E_TESTS_TOKEN o checkout falha e derruba o workflow. O secrets
+  # context não existe no `if` de job, então a checagem vira um job próprio.
+  check-e2e-token:
+    runs-on: ubuntu-latest
+    outputs:
+      has-token: ${{ steps.check.outputs.has-token }}
+    steps:
+      - id: check
+        env:
+          E2E_TESTS_TOKEN: ${{ secrets.E2E_TESTS_TOKEN }}
+        run: |
+          if [ -n "$E2E_TESTS_TOKEN" ]; then
+            echo "has-token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-token=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::E2E_TESTS_TOKEN ausente — E2E ignorado (requer acesso a segmentio/sdk-e2e-tests)."
+          fi
+
   e2e-tests:
+    needs: check-e2e-token
+    if: ${{ needs.check-e2e-token.outputs.has-token == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
