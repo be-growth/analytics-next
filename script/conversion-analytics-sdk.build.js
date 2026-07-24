@@ -5344,6 +5344,60 @@ function getVersionType() {
 
 /***/ }),
 
+/***/ 6918:
+/*!******************************************************************!*\
+  !*** ./src/plugins/conversion-collector/app-enrichment/index.ts ***!
+  \******************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   appEnrichment: () => (/* binding */ appEnrichment)
+/* harmony export */ });
+/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! tslib */ 5478);
+/* harmony import */ var _generated_version__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../../../generated/version */ 6452);
+
+
+var SDK_LIBRARY_NAME = 'conversion-analytics-sdk';
+/**
+ * Always-on enrichment: stamps `context.app.name` (from settings.appName) and
+ * `context.library.{name,version}` on every event of the native pipeline.
+ *
+ * These used to be emitted only by `conversionContextEnrichment`, which is
+ * opt-in (`enableContextEnrichment`) AND overwrites `anonymousId` — so with the
+ * flag off (the default) both `app_name` and `sdk_version` never left the
+ * browser (AU-165). This plugin fills that gap without touching `anonymousId`.
+ */
+function appEnrichment(settings) {
+    var enrich = function (ctx) {
+        var _a;
+        var evtCtx = (_a = ctx.event.context) !== null && _a !== void 0 ? _a : {};
+        var nextCtx = (0,tslib__WEBPACK_IMPORTED_MODULE_0__.__assign)((0,tslib__WEBPACK_IMPORTED_MODULE_0__.__assign)({}, evtCtx), { library: { name: SDK_LIBRARY_NAME, version: _generated_version__WEBPACK_IMPORTED_MODULE_1__.version } });
+        if (settings.appName) {
+            nextCtx.app = { name: settings.appName };
+        }
+        ctx.updateEvent('context', nextCtx);
+        return ctx;
+    };
+    return {
+        name: 'app-enrichment',
+        type: 'enrichment',
+        version: '0.1.0',
+        isLoaded: function () { return true; },
+        load: function () { return Promise.resolve(); },
+        track: enrich,
+        identify: enrich,
+        page: enrich,
+        screen: enrich,
+        alias: enrich,
+        group: enrich,
+    };
+}
+
+
+/***/ }),
+
 /***/ 2455:
 /*!**********************************************************!*\
   !*** ./src/plugins/conversion-collector/batch-buffer.ts ***!
@@ -7103,14 +7157,16 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   conversionPipelinePlugins: () => (/* binding */ conversionPipelinePlugins)
 /* harmony export */ });
+/* harmony import */ var _app_enrichment__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./app-enrichment */ 6918);
 /* harmony import */ var _enrichment_click_id_enrichment__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./enrichment/click-id-enrichment */ 9964);
-/* harmony import */ var _enrichment_consent_enrichment__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./enrichment/consent-enrichment */ 6406);
-/* harmony import */ var _enrichment_context_enrichment__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./enrichment/context-enrichment */ 7141);
-/* harmony import */ var _enrichment_identify_enrichment__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./enrichment/identify-enrichment */ 2998);
-/* harmony import */ var _enrichment_page_enrichment__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./enrichment/page-enrichment */ 2407);
-/* harmony import */ var _gpt_slot_events__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./gpt-slot-events */ 7234);
-/* harmony import */ var _destination_plugin__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./destination-plugin */ 2674);
-/* harmony import */ var _session_enrichment__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./session-enrichment */ 9399);
+/* harmony import */ var _enrichment_consent_enrichment__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ./enrichment/consent-enrichment */ 6406);
+/* harmony import */ var _enrichment_context_enrichment__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ./enrichment/context-enrichment */ 7141);
+/* harmony import */ var _enrichment_identify_enrichment__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! ./enrichment/identify-enrichment */ 2998);
+/* harmony import */ var _enrichment_page_enrichment__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! ./enrichment/page-enrichment */ 2407);
+/* harmony import */ var _gpt_slot_events__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! ./gpt-slot-events */ 7234);
+/* harmony import */ var _destination_plugin__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./destination-plugin */ 2674);
+/* harmony import */ var _session_enrichment__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./session-enrichment */ 9399);
+
 
 
 
@@ -7127,26 +7183,27 @@ __webpack_require__.r(__webpack_exports__);
 function conversionPipelinePlugins(settings) {
     var plugins = [
         (0,_enrichment_click_id_enrichment__WEBPACK_IMPORTED_MODULE_0__.clickIdEnrichment)(),
-        (0,_session_enrichment__WEBPACK_IMPORTED_MODULE_1__.sessionEnrichment)(settings),
-        (0,_destination_plugin__WEBPACK_IMPORTED_MODULE_2__.conversionCollectorPlugin)(settings),
+        (0,_app_enrichment__WEBPACK_IMPORTED_MODULE_1__.appEnrichment)(settings),
+        (0,_session_enrichment__WEBPACK_IMPORTED_MODULE_2__.sessionEnrichment)(settings),
+        (0,_destination_plugin__WEBPACK_IMPORTED_MODULE_3__.conversionCollectorPlugin)(settings),
     ];
     if (settings.enableConsentEnrichment === true ||
         typeof settings.isTrackingAllowed === 'function') {
-        plugins.unshift((0,_enrichment_consent_enrichment__WEBPACK_IMPORTED_MODULE_3__.conversionConsentEnrichment)(settings));
+        plugins.unshift((0,_enrichment_consent_enrichment__WEBPACK_IMPORTED_MODULE_4__.conversionConsentEnrichment)(settings));
     }
     if (settings.enableContextEnrichment === true) {
-        plugins.unshift((0,_enrichment_context_enrichment__WEBPACK_IMPORTED_MODULE_4__.conversionContextEnrichment)(settings));
+        plugins.unshift((0,_enrichment_context_enrichment__WEBPACK_IMPORTED_MODULE_5__.conversionContextEnrichment)(settings));
     }
     if (settings.enableIdentifyHashing === true) {
         var collectorIndex = plugins.findIndex(function (p) { return p.name === 'Conversion Collector'; });
-        plugins.splice(collectorIndex >= 0 ? collectorIndex : plugins.length, 0, (0,_enrichment_identify_enrichment__WEBPACK_IMPORTED_MODULE_5__.conversionIdentifyEnrichment)(settings));
+        plugins.splice(collectorIndex >= 0 ? collectorIndex : plugins.length, 0, (0,_enrichment_identify_enrichment__WEBPACK_IMPORTED_MODULE_6__.conversionIdentifyEnrichment)(settings));
     }
     if (settings.enablePageTaxonomy === true) {
         var collectorIndex = plugins.findIndex(function (p) { return p.name === 'Conversion Collector'; });
-        plugins.splice(collectorIndex >= 0 ? collectorIndex : plugins.length, 0, (0,_enrichment_page_enrichment__WEBPACK_IMPORTED_MODULE_6__.conversionPageEnrichment)(settings));
+        plugins.splice(collectorIndex >= 0 ? collectorIndex : plugins.length, 0, (0,_enrichment_page_enrichment__WEBPACK_IMPORTED_MODULE_7__.conversionPageEnrichment)(settings));
     }
     if (settings.enableGptSlotEvents === true) {
-        plugins.push((0,_gpt_slot_events__WEBPACK_IMPORTED_MODULE_7__.conversionGptSlotEventsPlugin)());
+        plugins.push((0,_gpt_slot_events__WEBPACK_IMPORTED_MODULE_8__.conversionGptSlotEventsPlugin)());
     }
     return plugins;
 }
