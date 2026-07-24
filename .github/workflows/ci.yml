@@ -30,7 +30,10 @@ jobs:
       - run: yarn turbo run --filter='./packages/node-integration-tests' test:perf-and-durability
       - uses: codecov/codecov-action@v5
         with:
-          fail_ci_if_error: true
+          # Sem CODECOV_TOKEN configurado neste fork, o upload tokenless é
+          # recusado e derrubava o job inteiro. Cobertura é informativa —
+          # o gate real é lint + test + perf, que rodam antes deste passo.
+          fail_ci_if_error: false
           flags: node
           directory: ./packages/node/coverage
           token: ${{ secrets.CODECOV_TOKEN }}
