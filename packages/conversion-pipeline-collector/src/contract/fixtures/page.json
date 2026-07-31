@@ -1,0 +1,31 @@
+{
+  "type": "page",
+  "anonymousId": "550e8400-e29b-41d4-a716-446655440001",
+  "messageId": "550e8400-e29b-41d4-a716-446655440005",
+  "timestamp": "2026-06-08T12:00:10.000Z",
+  "originalTimestamp": "2026-06-08T12:00:10.000Z",
+  "sentAt": "2026-06-08T12:00:11.000Z",
+  "_metadata": { "retryCount": 0 },
+  "properties": {
+    "page_path": "/usa-cc-p1",
+    "utm_source": "newsletter",
+    "utm_medium": "email",
+    "gclid": "legacy-gclid",
+    "query_params": { "utm_term": "cc" }
+  },
+  "context": {
+    "sessionId": "660e8400-e29b-41d4-a716-446655440000",
+    "app": { "name": "lp-usa" },
+    "library": { "name": "conversion-analytics-sdk", "version": "1.0.0" },
+    "channel": "browser",
+    "campaign": {},
+    "page": {
+      "url": "https://lp.example.com/usa-cc-p1",
+      "path": "/usa-cc-p1",
+      "title": "USA CC P1",
+      "referrer": "https://ref.example.com/",
+      "search": "?utm_source=newsletter&utm_medium=email&utm_term=cc"
+    },
+    "traits": {}
+  }
+}

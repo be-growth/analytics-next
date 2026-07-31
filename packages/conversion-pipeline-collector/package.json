@@ -9,7 +9,8 @@
   "files": [
     "dist/",
     "src/",
-    "!**/__tests__/**"
+    "!**/__tests__/**",
+    "!src/contract/**"
   ],
   "scripts": {
     "test": "yarn jest",

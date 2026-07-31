@@ -29,6 +29,9 @@ steps:
       - yarn scripts test
       - yarn scripts lint
       - yarn run test:check-dts
+      - echo "+++ AU-191 — @utua/conversion-pipeline-collector contract"
+      - yarn workspace @utua/conversion-pipeline-collector test
+      - yarn workspace @utua/conversion-pipeline-collector tsc
     plugins:
       - ssh://git@github.com/segmentio/cache-buildkite-plugin#v2.0.0:
           key: "v1.1-cache-dev-{{ checksum 'yarn.lock' }}"
