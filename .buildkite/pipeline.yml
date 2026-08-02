@@ -29,7 +29,7 @@ steps:
       - yarn scripts test
       - yarn scripts lint
       - yarn run test:check-dts
-      - echo "+++ AU-191 — @utua/conversion-pipeline-collector contract"
+      - echo "+++ @utua/conversion-pipeline-collector contract"
       - yarn workspace @utua/conversion-pipeline-collector test
       - yarn workspace @utua/conversion-pipeline-collector tsc
     plugins:

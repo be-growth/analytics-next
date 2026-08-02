@@ -1,6 +1,6 @@
 # Conversion SDK ↔ Collector wire contract — v1
 
-> **Status:** Frozen since AU-191. See [versioning rules](#versioning-rules)
+> **Status:** Frozen for contract v1. See [versioning rules](#versioning-rules)
 > before changing anything in this folder.
 
 This folder is the **versioned source of truth** for the JSON payload that the
@@ -17,9 +17,10 @@ The contract is:
   `src/collect-handler.ts`.
 - **Frozen** — the field paths in `FROZEN_PAYLOAD_KEYS` MUST NOT be
   renamed or removed without a version bump.
-- **Test-guarded** — `src/__tests__/contract.test.ts` parses every fixture
-  through the real `parseCollectBody` + `normalizeCollectEvent` pipeline
-  and asserts that every frozen key is present and consumed.
+- **Test-guarded** — `src/__tests__/contract.test.ts` parses the fixtures
+  through the real `parseCollectBody` + `normalizeCollectEvent` pipeline,
+  checks the frozen-key snapshot and maps every frozen key to its real
+  `FlatEvent` column, JSON bucket or PII hash output.
 
 The folder is excluded from the package build
 (`tsconfig.build.json`) and from the published npm `files` list
@@ -45,12 +46,12 @@ payloads live in [`fixtures/`](./fixtures/).
 
 ### Required fields per event
 
-| Path | Why it is required |
-|------|--------------------|
-| `type` | Top-level discriminator (`track` \| `page` \| `identify` \| `screen`). The Collector rejects unknown values. |
-| `anonymousId` | Visitor identity. UUID v4 in production traffic. |
-| `messageId` | UUID v4, stable across retries — used for server-side dedup. |
-| `context.sessionId` | UUID v4 — primary key for Collector / Redis session aggregation. **This is the canonical session key.** |
+| Path                | Why it is required                                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `type`              | Top-level discriminator (`track` \| `page` \| `identify` \| `screen`). The Collector rejects unknown values. |
+| `anonymousId`       | Visitor identity. UUID v4 in production traffic.                                                             |
+| `messageId`         | UUID v4, stable across retries — used for server-side dedup.                                                 |
+| `context.sessionId` | UUID v4 — primary key for Collector / Redis session aggregation. **This is the canonical session key.**      |
 
 ### Frozen optional fields
 
@@ -62,15 +63,15 @@ require a v2.
 
 ## Versioning rules
 
-| Change | Allowed in v1? |
-|--------|----------------|
-| Add a new optional field anywhere in the payload | ✅ (no version bump) |
-| Add a new entry to `FROZEN_PAYLOAD_KEYS` for a field the SDK already emits | ✅ |
-| Add a new top-level discriminator value to `V1EventType` | ❌ (v2) |
-| Rename any frozen key (e.g. `context.sessionId` → `context.session.id`) | ❌ (v2) |
-| Remove any frozen key | ❌ (v2) |
-| Change the type of any frozen field | ❌ (v2) |
-| Change the wire envelope from `[CollectEvent, ...]` to anything else | ❌ (v2) |
+| Change                                                                     | Allowed in v1?       |
+| -------------------------------------------------------------------------- | -------------------- |
+| Add a new optional field anywhere in the payload                           | ✅ (no version bump) |
+| Add a new entry to `FROZEN_PAYLOAD_KEYS` for a field the SDK already emits | ✅                   |
+| Add a new top-level discriminator value to `V1EventType`                   | ❌ (v2)              |
+| Rename any frozen key (e.g. `context.sessionId` → `context.session.id`)    | ❌ (v2)              |
+| Remove any frozen key                                                      | ❌ (v2)              |
+| Change the type of any frozen field                                        | ❌ (v2)              |
+| Change the wire envelope from `[CollectEvent, ...]` to anything else       | ❌ (v2)              |
 
 When a v2 contract is needed:
 
@@ -85,12 +86,12 @@ When a v2 contract is needed:
 
 ## Fixture catalogue
 
-| File | Discriminator | Notes |
-|------|---------------|-------|
-| `fixtures/track-impression.json` | `track` / `impression` | Full payload: ad-tech properties, campaign, page, traits, env metadata. |
+| File                             | Discriminator          | Notes                                                                                                  |
+| -------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------ |
+| `fixtures/track-impression.json` | `track` / `impression` | Full payload: ad-tech properties, campaign, page, traits, env metadata.                                |
 | `fixtures/track-ad-request.json` | `track` / `ad_request` | Minimum viable `ad_request` payload (drives `quality_flag: incomplete` if `ad_request_id` is missing). |
-| `fixtures/identify.json` | `identify` | Email + phone in `traits` — exercises the Collector PII hashing path. |
-| `fixtures/page.json` | `page` | Demonstrates the `properties.*` / `query_params` attribution fallback path. |
+| `fixtures/identify.json`         | `identify`             | Email + phone in `traits` — exercises the Collector PII hashing path.                                  |
+| `fixtures/page.json`             | `page`                 | Demonstrates the `properties.*` / `query_params` attribution fallback path.                            |
 
 Every fixture uses a different `messageId` so they can be batched in a
 single `[CollectEvent, ...]` array without colliding.
@@ -99,22 +100,54 @@ single `[CollectEvent, ...]` array without colliding.
 
 ## How the contract is enforced
 
-`src/__tests__/contract.test.ts` (added in AU-191) loads each fixture,
-runs it through `parseCollectBody` + `normalizeCollectEvent`, and asserts:
+### Collector contract gate
 
-1. Every path in `FROZEN_PAYLOAD_KEYS` is present in every fixture.
-2. Every fixture's `type` is in `V1EventType`.
-3. Every fixture normalises to a `FlatEvent` without throwing.
-4. Every fixture's `context.sessionId` survives into
-   `flat.session_id` — proving the production code still reads the
-   canonical key.
-5. **Mutation tests** — a clone of each fixture with `context.sessionId`
-   removed throws `NormalizeError('invalid_session_id')`. The same
-   pattern guards `anonymousId`, `messageId`, `context.app.name`,
-   `context.library.name` and `context.library.version`.
+`src/__tests__/contract.test.ts` loads the representative fixtures and runs
+production parsing and normalisation. It currently verifies:
 
-If a future change to the production pipeline accidentally renames or
-drops a frozen key path, this test breaks before the change can ship.
+1. `FROZEN_PAYLOAD_KEYS` still matches the initial v1 snapshot.
+2. The canonical `track-impression` fixture expresses the complete frozen
+   field set; the other fixtures validate the frozen fields they express.
+3. Every frozen key is explicitly mapped from `normalizeCollectEvent` output
+   to a dedicated `FlatEvent` column or, where no dedicated column exists, to
+   `properties_json` or `context_json`. Raw email and phone fields are mapped
+   to their hashed `FlatEvent` outputs rather than asserted as raw PII.
+4. Fixtures pass through `parseCollectBody` + `normalizeCollectEvent`, and
+   identity fields including canonical `context.sessionId` reach the expected
+   `FlatEvent` columns.
+5. Critical validation tripwires reject a missing or invalid session ID,
+   missing `anonymousId`, missing `messageId` and an unknown event type.
+
+These are focused contract assertions, not a general mutation-testing suite.
+In particular, there are no mutation tests for `context.app.name` or the
+`context.library.*` fields.
+
+### Browser producer gate
+
+`packages/browser-integration-tests/src/conversion-sdk/wire-contract.spec.ts`
+is the real Playwright producer gate. It serves the wire-contract page, executes
+the built browser SDK bundle, intercepts the actual `POST /collector` request
+and inspects the initial page event. The gate requires:
+
+- `context.sessionId` to be a UUID v4;
+- legacy `context.session_id` to be absent;
+- `context.app.name` to contain the expected app name; and
+- `context.library.name` and `context.library.version` to be present.
+
+The gate deliberately keeps the browser's normal producer flow; it does not
+construct a fixture and submit it in place of the SDK.
+
+### Session behavior outside these gates
+
+The contract and producer gates validate the canonical key and UUID v4 shape,
+but they do **not** cover session lifecycle behavior. Cookie TTL,
+session rotation/renewal, cross-tab behavior and other persistence semantics
+remain outside their scope and must continue to be covered by their dedicated
+session tests or integration lanes.
+
+If a future change renames a frozen input path, removes its output mapping or
+changes canonical session emission, the corresponding gate should fail before
+the change ships.
 
 ---
 

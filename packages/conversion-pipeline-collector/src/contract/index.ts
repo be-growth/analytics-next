@@ -1,5 +1,5 @@
 /**
- * AU-191: Conversion SDK ↔ Collector wire contract v1.
+ * Conversion SDK ↔ Collector wire contract v1.
  *
  * Internal barrel for the contract module. NOT exported from
  * `../index.ts` — tests and docs only.

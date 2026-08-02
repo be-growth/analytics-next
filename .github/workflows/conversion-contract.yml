@@ -1,6 +1,6 @@
 name: Conversion Contract
 
-# AU-191 contract protection.
+# Conversion SDK ↔ Collector contract protection.
 #
 # Dedicated gate for the SDK ↔ Collector wire contract. Runs on every PR
 # targeting the default branch so that any change to the contract module
@@ -9,14 +9,24 @@ name: Conversion Contract
 # `collect-handler.ts`) is forced through the contract test suite and its
 # TypeScript typecheck before merge.
 #
-# Scope: this workflow is intentionally narrow. It only exercises the
-# `@utua/conversion-pipeline-collector` workspace — full monorepo QA
+# Also runs the browser producer gate — a focused Playwright check that
+# builds the conversion SDK bundle and intercepts the POST to
+# `/collector` to assert the canonical wire payload
+# (`context.sessionId`, `context.app.name`, `context.library.name/version`)
+# is emitted by the producer. This gate does NOT require E2E_TESTS_TOKEN,
+# so it runs on every PR.
+#
+# Scope: this workflow is intentionally narrow. Full monorepo QA
 # continues to live in `.buildkite/pipeline.yml` and `.github/workflows/ci.yml`.
 
 on:
   pull_request:
     branches: [master]
 
+# PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD is set so the immutable install step
+# does not try to fetch browsers we don't need for the collector job.
+# The producer wire-contract job overrides this with PLAYWRIGHT_BROWSERS_PATH
+# and installs just chromium via `npx playwright install`.
 env:
   HUSKY: 0
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
@@ -49,3 +59,50 @@ jobs:
 
       - name: '@utua/conversion-pipeline-collector typecheck'
         run: yarn workspace @utua/conversion-pipeline-collector tsc
+
+  producer-wire-contract:
+    name: '@segment/analytics-next — producer wire contract (Playwright)'
+    runs-on: ubuntu-latest
+    # Override the workflow-level skip so we can actually fetch the
+    # chromium binary for the Playwright run.
+    env:
+      HUSKY: 0
+      CI: 'true'
+      PW_CHROMIUM_ONLY: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install dependencies (yarn immutable)
+        run: yarn install --immutable
+
+      - name: Build browser SDK dependencies
+        # `build:conversion-sdk:prod` is a one-off webpack task that does
+        # NOT cascade through turbo. Build the workspace dependencies it
+        # needs (analytics-core, analytics-page-tools, analytics-generic-utils)
+        # explicitly so the webpack resolve can find them.
+        run: yarn turbo run --filter=@segment/analytics-next^... build
+
+      - name: Build browser SDK (conversion bundle)
+        # Produces packages/browser/dist/umd/sdk.min.js + the
+        # aliased copy under packages/browser-integration-tests/conversion-sdk/sdk.min.js
+        # via scripts/sync-script.cjs.
+        run: yarn workspace @segment/analytics-next build:conversion-sdk:prod
+
+      - name: Install Playwright Chromium
+        run: npx --yes playwright install --with-deps chromium
+
+      - name: Run producer wire contract
+        run: yarn workspace @internal/browser-integration-tests test:wire-contract
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: producer-wire-contract-report
+          path: packages/browser-integration-tests/playwright-report/
+          if-no-files-found: ignore

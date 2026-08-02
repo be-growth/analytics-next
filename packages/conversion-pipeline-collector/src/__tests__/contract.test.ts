@@ -1,5 +1,5 @@
 /**
- * AU-191 contract tests.
+ * v1 wire contract tests.
  *
  * These tests guard the v1 wire contract between the browser SDK and the
  * Collector. They DO NOT change production behavior — they assert that
@@ -19,6 +19,7 @@ import {
   type V1CollectEvent,
 } from '../contract'
 import { handleCollectRequest } from '../collect-handler'
+import { hashPiiField } from '../hash-pii'
 import { normalizeCollectEvent, NormalizeError } from '../normalize'
 
 const FIXTURES_DIR = join(__dirname, '..', 'contract', 'fixtures')
@@ -44,7 +45,7 @@ function getByPath(obj: unknown, path: string): unknown {
 }
 
 /**
- * Snapshot of the frozen key list as it shipped in AU-191. If this list
+ * Snapshot of the initial frozen key list. If this list
  * is edited without a corresponding test update, the contract test will
  * flag it via `expect(FROZEN_PAYLOAD_KEYS).toEqual(FROZEN_KEYS_SNAPSHOT)`.
  */
@@ -105,13 +106,127 @@ const FIXTURES: readonly FixtureName[] = [
   'page',
 ]
 
-describe('AU-191 — v1 wire contract', () => {
+  describe('v1 wire contract', () => {
   it('ships with version v1', () => {
     expect(V1_CONTRACT_VERSION).toBe('v1')
   })
 
   it('keeps the frozen key list stable', () => {
     expect([...FROZEN_PAYLOAD_KEYS]).toEqual(FROZEN_KEYS_SNAPSHOT)
+  })
+
+  it('maps every frozen payload key to a FlatEvent column or JSON bucket', () => {
+    const fixture = loadFixture('track-impression')
+    const flat = normalizeCollectEvent(fixture)
+    const properties = JSON.parse(flat.properties_json) as Record<string, unknown>
+    const context = JSON.parse(flat.context_json) as Record<string, unknown>
+
+    const outputByFrozenKey: Record<string, unknown> = {
+      type: fixture.type === 'track' ? fixture.event : flat.event_type,
+      event: flat.event_type,
+      anonymousId: flat.anonymous_id,
+      messageId: flat.message_id,
+      userId: flat.user_id,
+      'context.sessionId': flat.session_id,
+      'context.app.name': getByPath(context, 'app.name'),
+      'context.library.name': getByPath(context, 'library.name'),
+      'context.library.version': getByPath(context, 'library.version'),
+      'context.campaign.source': flat.utm_source,
+      'context.campaign.medium': flat.utm_medium,
+      'context.campaign.name': flat.utm_campaign,
+      'context.campaign.gclid': flat.gclid,
+      'context.page.url': flat.page_url,
+      'context.page.path': getByPath(context, 'page.path'),
+      'context.page.title': flat.page_title,
+      'context.page.referrer': flat.referrer,
+      'properties.block_id': flat.block_id,
+      'properties.block_position': flat.block_position,
+      'properties.ad_request_id': flat.ad_request_id,
+      'properties.viewable': flat.viewable,
+      'properties.utm_source': getByPath(properties, 'utm_source'),
+      'properties.utm_medium': getByPath(properties, 'utm_medium'),
+      'properties.utm_campaign': getByPath(properties, 'utm_campaign'),
+      'properties.utm_content': flat.utm_content,
+      'properties.utm_term': flat.utm_term,
+      'properties.gclid': getByPath(properties, 'gclid'),
+      'properties.fbclid': flat.fbclid,
+      'properties.ttclid': flat.ttclid,
+      'properties.msclkid': flat.msclkid,
+      'properties.twclid': flat.twclid,
+      'properties.query_params': getByPath(properties, 'query_params'),
+      'properties.visitor_country': flat.visitor_country,
+      'properties.country': flat.country,
+      'properties.vertical': flat.vertical,
+      'properties.product': flat.product,
+      'properties.funnel': flat.funnel,
+      'properties.page_path': flat.page_path,
+      'traits.email': flat.email_hash,
+      'traits.email_hash': flat.email_hash,
+      'traits.email_domain': flat.email_domain,
+      'traits.phone': flat.phone_hash,
+      'traits.phone_hash': flat.phone_hash,
+      timestamp: flat.timestamp,
+      sentAt: flat.sent_at,
+      originalTimestamp: flat.original_timestamp,
+      '_metadata.retryCount': flat.retry_count,
+    }
+
+    expect(Object.keys(outputByFrozenKey)).toEqual([...FROZEN_PAYLOAD_KEYS])
+
+    const expectedByFrozenKey: Record<string, unknown> = {
+      type: fixture.event,
+      event: fixture.event,
+      anonymousId: fixture.anonymousId,
+      messageId: fixture.messageId,
+      userId: fixture.userId,
+      'context.sessionId': fixture.context.sessionId,
+      'context.app.name': getByPath(fixture.context, 'app.name'),
+      'context.library.name': getByPath(fixture.context, 'library.name'),
+      'context.library.version': getByPath(fixture.context, 'library.version'),
+      'context.campaign.source': getByPath(fixture.context, 'campaign.source'),
+      'context.campaign.medium': getByPath(fixture.context, 'campaign.medium'),
+      'context.campaign.name': getByPath(fixture.context, 'campaign.name'),
+      'context.campaign.gclid': getByPath(fixture.context, 'campaign.gclid'),
+      'context.page.url': getByPath(fixture.context, 'page.url'),
+      'context.page.path': getByPath(fixture.context, 'page.path'),
+      'context.page.title': getByPath(fixture.context, 'page.title'),
+      'context.page.referrer': getByPath(fixture.context, 'page.referrer'),
+      'properties.block_id': getByPath(fixture.properties, 'block_id'),
+      'properties.block_position': getByPath(fixture.properties, 'block_position'),
+      'properties.ad_request_id': getByPath(fixture.properties, 'ad_request_id'),
+      'properties.viewable': getByPath(fixture.properties, 'viewable'),
+      'properties.utm_source': getByPath(fixture.properties, 'utm_source'),
+      'properties.utm_medium': getByPath(fixture.properties, 'utm_medium'),
+      'properties.utm_campaign': getByPath(fixture.properties, 'utm_campaign'),
+      'properties.utm_content': getByPath(fixture.properties, 'utm_content'),
+      'properties.utm_term': getByPath(fixture.properties, 'utm_term'),
+      'properties.gclid': getByPath(fixture.properties, 'gclid'),
+      'properties.fbclid': getByPath(fixture.properties, 'fbclid'),
+      'properties.ttclid': getByPath(fixture.properties, 'ttclid'),
+      'properties.msclkid': getByPath(fixture.properties, 'msclkid'),
+      'properties.twclid': getByPath(fixture.properties, 'twclid'),
+      'properties.query_params': getByPath(fixture.properties, 'query_params'),
+      'properties.visitor_country': getByPath(fixture.properties, 'visitor_country'),
+      'properties.country': getByPath(fixture.properties, 'country'),
+      'properties.vertical': getByPath(fixture.properties, 'vertical'),
+      'properties.product': getByPath(fixture.properties, 'product'),
+      'properties.funnel': getByPath(fixture.properties, 'funnel'),
+      'properties.page_path': getByPath(fixture.properties, 'page_path'),
+      'traits.email': hashPiiField(getByPath(fixture.traits, 'email')),
+      'traits.email_hash': hashPiiField(getByPath(fixture.traits, 'email')),
+      'traits.email_domain': getByPath(fixture.traits, 'email_domain'),
+      'traits.phone': hashPiiField(getByPath(fixture.traits, 'phone')),
+      'traits.phone_hash': hashPiiField(getByPath(fixture.traits, 'phone')),
+      timestamp: fixture.timestamp,
+      sentAt: fixture.sentAt,
+      originalTimestamp: fixture.originalTimestamp,
+      '_metadata.retryCount': fixture._metadata?.retryCount,
+    }
+
+    expect(Object.keys(expectedByFrozenKey)).toEqual([...FROZEN_PAYLOAD_KEYS])
+    for (const path of FROZEN_PAYLOAD_KEYS) {
+      expect(outputByFrozenKey[path]).toEqual(expectedByFrozenKey[path])
+    }
   })
 
   describe.each(FIXTURES)('fixture %s', (name) => {

@@ -1,5 +1,5 @@
 /**
- * AU-191: Conversion SDK ↔ Collector wire contract v1.
+ * Conversion SDK ↔ Collector wire contract v1.
  *
  * This module freezes the JSON shape that the browser SDK sends on
  * `POST /collect` to the Collector. It is **type-only** at runtime —
