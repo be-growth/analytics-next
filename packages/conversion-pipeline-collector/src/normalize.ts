@@ -44,6 +44,7 @@ function readIdentity(event: CollectEvent): {
 
 function readSessionId(event: CollectEvent): string {
   const ctx = event.context ?? {}
+  // Native SDK payloads use sessionId; session_id is legacy compatibility.
   const sessionId = asString(ctx.sessionId) ?? asString(ctx.session_id)
   if (!sessionId || !isValidUuidV4(sessionId)) {
     throw new NormalizeError(

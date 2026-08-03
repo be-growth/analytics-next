@@ -1,0 +1,31 @@
+{
+  "type": "track",
+  "event": "ad_request",
+  "anonymousId": "550e8400-e29b-41d4-a716-446655440001",
+  "messageId": "550e8400-e29b-41d4-a716-44665544000a",
+  "timestamp": "2026-06-08T12:00:02.000Z",
+  "originalTimestamp": "2026-06-08T12:00:02.000Z",
+  "sentAt": "2026-06-08T12:00:03.000Z",
+  "_metadata": { "retryCount": 0 },
+  "properties": {
+    "block_id": "top_father",
+    "ad_request_id": "req_abc123"
+  },
+  "context": {
+    "sessionId": "660e8400-e29b-41d4-a716-446655440000",
+    "app": { "name": "lp-usa" },
+    "library": { "name": "conversion-analytics-sdk", "version": "1.0.0" },
+    "channel": "browser",
+    "campaign": {
+      "source": "google",
+      "gclid": "abc123"
+    },
+    "page": {
+      "url": "https://lp.example.com/usa-cc-p1",
+      "path": "/usa-cc-p1",
+      "title": "USA CC P1",
+      "referrer": "https://www.google.com/",
+      "search": "?utm_source=google&gclid=abc123"
+    }
+  }
+}

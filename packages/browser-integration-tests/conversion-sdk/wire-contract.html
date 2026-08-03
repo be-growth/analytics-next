@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Producer Wire Contract</title>
+  </head>
+  <body>
+    <h1>Producer wire contract</h1>
+    <script>
+      // Minimal harness for the browser producer wire contract. The page is
+      // intentionally bare: it only proves that the browser SDK stamps
+      // the canonical wire payload (camelCase sessionId, app.name,
+      // library.name/version) on the initial page event without
+      // depending on the wider E2E suite or any SDK_OPTIONS_TOKEN.
+      window.analytics = window.analytics || { queue: [] }
+      window.analytics.writeKey = 'conversion-pipeline'
+      window.analytics.config = {
+        appName: 'wire-contract',
+        flushIntervalMs: 2000,
+        batchSize: 10,
+        retryAttempts: 1,
+        enableContextEnrichment: false,
+        enableGptSlotEvents: false,
+      }
+    </script>
+    <script src="/conversion-sdk/sdk.min.js"></script>
+  </body>
+</html>

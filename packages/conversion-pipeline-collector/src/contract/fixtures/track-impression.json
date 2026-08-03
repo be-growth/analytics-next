@@ -1,0 +1,71 @@
+{
+  "type": "track",
+  "event": "impression",
+  "anonymousId": "550e8400-e29b-41d4-a716-446655440001",
+  "userId": "550e8400-e29b-41d4-a716-446655440003",
+  "messageId": "550e8400-e29b-41d4-a716-446655440002",
+  "timestamp": "2026-06-08T12:00:00.000Z",
+  "originalTimestamp": "2026-06-08T12:00:00.000Z",
+  "sentAt": "2026-06-08T12:00:01.000Z",
+  "_metadata": { "retryCount": 0 },
+  "traits": {
+    "email": "user@example.com",
+    "email_hash": "hash-email",
+    "email_domain": "example.com",
+    "phone": "+5511999999999",
+    "phone_hash": "hash-phone"
+  },
+  "properties": {
+    "block_id": "top_father",
+    "block_position": 1,
+    "ad_request_id": "ad-request-123",
+    "viewable": true,
+    "utm_source": "google",
+    "utm_medium": "cpc",
+    "utm_campaign": "cc-mastercardbuilt-p1",
+    "utm_content": "hero",
+    "utm_term": "credit card",
+    "gclid": "abc123",
+    "fbclid": "fb123",
+    "ttclid": "tt123",
+    "msclkid": "ms123",
+    "twclid": "tw123",
+    "query_params": { "utm_source": "google" },
+    "visitor_country": "BR",
+    "country": "usa",
+    "vertical": "cc",
+    "product": "mastercardbuilt",
+    "funnel": "p1",
+    "page_path": "/usa-cc-mastercardbuilt-p1"
+  },
+  "context": {
+    "sessionId": "660e8400-e29b-41d4-a716-446655440000",
+    "app": { "name": "lp-usa" },
+    "library": { "name": "conversion-analytics-sdk", "version": "1.0.0" },
+    "channel": "browser",
+    "campaign": {
+      "source": "google",
+      "medium": "cpc",
+      "name": "cc-mastercardbuilt-p1",
+      "gclid": "abc123"
+    },
+    "page": {
+      "url": "https://lp.example.com/usa-cc-mastercardbuilt-p1",
+      "path": "/usa-cc-mastercardbuilt-p1",
+      "title": "USA CC Mastercard Built P1",
+      "referrer": "https://www.google.com/",
+      "search": "?utm_source=google&gclid=abc123"
+    },
+    "traits": {
+      "email": "user@example.com",
+      "email_hash": "hash-email",
+      "email_domain": "example.com",
+      "phone": "+5511999999999",
+      "phone_hash": "hash-phone"
+    },
+    "locale": "en-US",
+    "screen": { "width": 1280, "height": 720 },
+    "timezone": "America/Los_Angeles",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+  }
+}
