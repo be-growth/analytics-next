@@ -49,4 +49,26 @@ describe('resolveSessionId', () => {
   it('generates a session when no override is configured', () => {
     expect(isValidUuidV4(resolveSessionId(baseSettings))).toBe(true)
   })
+
+  it('survives a host override that throws (P2-8)', () => {
+    // sessionEnrichment runs as an `enrichment` plugin, and the core executes
+    // those via attempt(), which logs a throw and lets the event through. An
+    // uncaught error here shipped every event with no context.sessionId at all
+    // — and those rows are filtered out of session_profiles downstream.
+    const onInvalid = jest.fn()
+    const resolved = resolveSessionId(
+      {
+        ...baseSettings,
+        getSessionId: () => {
+          throw new Error('host blew up')
+        },
+      },
+      onInvalid
+    )
+
+    expect(isValidUuidV4(resolved)).toBe(true)
+    expect(onInvalid).toHaveBeenCalledWith(
+      expect.stringContaining('host blew up')
+    )
+  })
 })
