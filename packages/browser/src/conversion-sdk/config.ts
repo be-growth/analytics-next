@@ -33,6 +33,7 @@ export function toCollectorSettings(
     appName: config.appName,
     getContext: config.getContext,
     getSessionId: config.getSessionId,
+    sessionCookieDomain: config.sessionCookieDomain,
     getVisitorCountry: config.getVisitorCountry,
     defaultPhoneCountryCode: config.defaultPhoneCountryCode,
     isTrackingAllowed: config.isTrackingAllowed,

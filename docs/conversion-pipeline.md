@@ -96,6 +96,8 @@ Campos obrigatórios por evento: [conversion-sdk/event-schema.md](./conversion-s
 | `isTrackingAllowed` | — | Hook de consentimento |
 | `respectDoNotTrack` | `false` | Honrar DNT do browser |
 | `enableGptSlotEvents` | `false` | Listeners GPT slot |
+| `getSessionId` | — | Override do session id. Deve retornar UUID v4 — valores inválidos são descartados com warn e a sessão do cookie assume |
+| `sessionCookieDomain` | — | Domínio dos cookies de sessão (ex.: `.utua.work`). Sem ele os cookies são host-only e a sessão reinicia a cada troca de subdomínio |
 
 ## Pipeline interno
 

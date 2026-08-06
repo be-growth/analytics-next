@@ -17,6 +17,12 @@ export interface ConversionCollectorSettings {
   appName?: string
   getContext?: () => Record<string, unknown>
   getSessionId?: () => string
+  /**
+   * Domain for the session cookies (e.g. `.utua.work`). Without it the cookies are
+   * host-only and the session restarts on every subdomain hop. No default: guessing
+   * the eTLD+1 in the browser is unreliable, so the host must opt in.
+   */
+  sessionCookieDomain?: string
   getVisitorCountry?: () => string | Promise<string>
   defaultPhoneCountryCode?: string
   isTrackingAllowed?: () => boolean

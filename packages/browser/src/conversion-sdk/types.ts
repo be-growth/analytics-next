@@ -34,6 +34,8 @@ export interface AnalyticsInitConfig {
   headers?: Record<string, string>
   getContext?: () => Record<string, unknown>
   getSessionId?: () => string
+  /** Domain for the session cookies (e.g. `.utua.work`) so the session survives subdomain hops. */
+  sessionCookieDomain?: string
   getVisitorCountry?: () => string | Promise<string>
   isTrackingAllowed?: () => boolean
   respectDoNotTrack?: boolean

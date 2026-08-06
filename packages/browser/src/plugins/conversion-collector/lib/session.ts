@@ -3,10 +3,12 @@ import { generateUuidV4, isValidUuidV4 } from './uuid'
 export {
   getOrCreateSessionId,
   getCurrentSessionId,
+  resetSessionMemory,
   SESSION_COOKIE,
   ACTIVITY_COOKIE,
   SESSION_INACTIVITY_MS,
 } from '../session-enrichment/session-manager'
+export type { SessionIdOptions } from '../session-enrichment/session-manager'
 
 export { SESSION_INACTIVITY_MS as SESSION_INACTIVITY_TTL_MS } from '../session-enrichment/session-manager'
 
