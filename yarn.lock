@@ -5075,7 +5075,7 @@ __metadata:
     mime: ^2.4.6
     node-fetch: ^2.6.7
     node-gyp: ^9.0.0
-    playwright: ^1.28.1
+    playwright: 1.61.1
     serve-handler: ^6.1.3
     size-limit: ^7.0.8
     terser-webpack-plugin: ^5.1.4
@@ -18415,17 +18415,6 @@ __metadata:
   bin:
     playwright: cli.js
   checksum: 2d85be1b6a88dbeeb206c5800629182840f07bd0e5e74f154fa57de2f1df16631918df9139a1cb8ddde8f2f125c5c9e447686a0fdadb61552b668ba97ffcaaf1
-  languageName: node
-  linkType: hard
-
-"playwright@npm:^1.28.1":
-  version: 1.28.1
-  resolution: "playwright@npm:1.28.1"
-  dependencies:
-    playwright-core: 1.28.1
-  bin:
-    playwright: cli.js
-  checksum: 97c6fff2835878da856bf1f587ec4cdcbcc9aa61c0efcf592633f6df37eabbb9e59d7a2ef994ec9283338e43ef80e278d6d52fed5f7c29abd0408fac0f69b3ca
   languageName: node
   linkType: hard
 
