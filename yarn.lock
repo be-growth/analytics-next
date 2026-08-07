@@ -5067,7 +5067,7 @@ __metadata:
     jest-dev-server: ^6.0.3
     jest-environment-jsdom: ^28.1.1
     jquery: ^3.5.1
-    js-cookie: 3.0.1
+    js-cookie: ^3.0.7
     jsdom: ^19.0.0
     lighthouse: ^9.6.3
     log-update: ^4.0.0
@@ -5075,7 +5075,7 @@ __metadata:
     mime: ^2.4.6
     node-fetch: ^2.6.7
     node-gyp: ^9.0.0
-    playwright: ^1.28.1
+    playwright: 1.61.1
     serve-handler: ^6.1.3
     size-limit: ^7.0.8
     terser-webpack-plugin: ^5.1.4
@@ -16141,10 +16141,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"js-cookie@npm:3.0.1":
-  version: 3.0.1
-  resolution: "js-cookie@npm:3.0.1"
-  checksum: bb48de67e2a6bd1ae3dfd6b2d5a167c33dd0c5a37e909206161eb0358c98f17cb55acd55827a58e9eea3630d89444e7479f7938ef4420dda443218b8c434a4c3
+"js-cookie@npm:3.0.7":
+  version: 3.0.7
+  resolution: "js-cookie@npm:3.0.7"
+  checksum: 2ce197fa171981af9b2686b49d4f4ed1ebfcec915db9d3ce42933415557726ca87135f6522ed5f5936b0d016e0f7e969344683dcd7f4e67a6fe2af9a976038d9
+  languageName: node
+  linkType: hard
+
+"js-cookie@patch:js-cookie@npm%3A3.0.7#./.yarn/patches/js-cookie-npm-3.0.7-a7a36a5505.patch::locator=analytics-monorepo%40workspace%3A.":
+  version: 3.0.7
+  resolution: "js-cookie@patch:js-cookie@npm%3A3.0.7#./.yarn/patches/js-cookie-npm-3.0.7-a7a36a5505.patch::version=3.0.7&hash=3d39b7&locator=analytics-monorepo%40workspace%3A."
+  checksum: ed16f90446a3f29a5645404c012029ce22f5578a4cbda349e5e475bff30c23cd22ff4004ca426227c2d16e61324dc2c609948fc60811ac64e77b8cb0139412af
   languageName: node
   linkType: hard
 
@@ -18408,17 +18415,6 @@ __metadata:
   bin:
     playwright: cli.js
   checksum: 2d85be1b6a88dbeeb206c5800629182840f07bd0e5e74f154fa57de2f1df16631918df9139a1cb8ddde8f2f125c5c9e447686a0fdadb61552b668ba97ffcaaf1
-  languageName: node
-  linkType: hard
-
-"playwright@npm:^1.28.1":
-  version: 1.28.1
-  resolution: "playwright@npm:1.28.1"
-  dependencies:
-    playwright-core: 1.28.1
-  bin:
-    playwright: cli.js
-  checksum: 97c6fff2835878da856bf1f587ec4cdcbcc9aa61c0efcf592633f6df37eabbb9e59d7a2ef994ec9283338e43ef80e278d6d52fed5f7c29abd0408fac0f69b3ca
   languageName: node
   linkType: hard
 
