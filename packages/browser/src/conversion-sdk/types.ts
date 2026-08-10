@@ -31,6 +31,13 @@ export interface AnalyticsInitConfig {
   flushIntervalMs?: number
   batchSize?: number
   retryAttempts?: number
+  /** Number of failed batch deliveries before dropping the batch. */
+  maxEventRetries?: number
+  /** Observes events dropped after a non-retryable response or retry exhaustion. */
+  onDrop?: (
+    events: CollectEvent[],
+    reason: 'rejected' | 'retry_exhausted'
+  ) => void
   headers?: Record<string, string>
   getContext?: () => Record<string, unknown>
   getSessionId?: () => string

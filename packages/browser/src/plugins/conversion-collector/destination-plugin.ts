@@ -62,6 +62,8 @@ export function conversionCollectorPlugin(
     endpoint: settings.endpoint,
     headers: settings.headers,
     retryAttempts: settings.retryAttempts ?? DEFAULT_RETRY_ATTEMPTS,
+    maxEventRetries: settings.maxEventRetries,
+    onDrop: settings.onDrop,
     flushIntervalMs: settings.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS,
     batchSize: settings.batchSize ?? DEFAULT_BATCH_SIZE,
   })

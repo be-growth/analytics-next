@@ -1,4 +1,4 @@
-import type { CollectEvent } from './types'
+import type { CollectDropReason, CollectEvent } from './types'
 import {
   readPersistedEventQueue,
   writePersistedEventQueue,
@@ -20,8 +20,6 @@ import {
  * `rejected` — the collector answered with a non-retryable status (4xx).
  * `retry_exhausted` — the batch failed `maxEventRetries` times in a row.
  */
-export type CollectDropReason = 'rejected' | 'retry_exhausted'
-
 /**
  * Retryable failures bump `_retryCount` and keep the batch at the head of the
  * queue. Without a ceiling, a batch that always fails blocks every event behind

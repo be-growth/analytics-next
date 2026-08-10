@@ -8,10 +8,16 @@ export type CollectEvent = Record<string, unknown> & {
   _retryCount?: number
 }
 
+export type CollectDropReason = 'rejected' | 'retry_exhausted'
+
 export interface ConversionCollectorSettings {
   endpoint: string
   headers?: Record<string, string>
   retryAttempts?: number
+  /** Number of failed batch deliveries before dropping the batch. */
+  maxEventRetries?: number
+  /** Observes events dropped after a non-retryable response or retry exhaustion. */
+  onDrop?: (events: CollectEvent[], reason: CollectDropReason) => void
   flushIntervalMs?: number
   batchSize?: number
   appName?: string

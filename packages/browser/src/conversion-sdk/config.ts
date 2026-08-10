@@ -27,6 +27,8 @@ export function toCollectorSettings(
     endpoint: config.endpoint ?? DEFAULT_INIT_CONFIG.endpoint,
     headers: config.headers,
     retryAttempts: config.retryAttempts ?? DEFAULT_INIT_CONFIG.retryAttempts,
+    maxEventRetries: config.maxEventRetries,
+    onDrop: config.onDrop,
     flushIntervalMs:
       config.flushIntervalMs ?? DEFAULT_INIT_CONFIG.flushIntervalMs,
     batchSize: config.batchSize ?? DEFAULT_INIT_CONFIG.batchSize,
