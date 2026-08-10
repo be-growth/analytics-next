@@ -79,7 +79,7 @@ Ver [backend-contract.md](./backend-contract.md) para spec completa.
 | `query_params` (opcional) | sessionStorage | chaves do plugin de page properties |
 | Fila de eventos | localStorage | `utua_event_queue` |
 
-- **TTL inatividade:** 5 minutos (`SESSION_INACTIVITY_MS`)
+- **TTL inatividade:** 30 minutos (`SESSION_INACTIVITY_MS`)
 - **Cookie flags:** `SameSite=Lax`, `Secure` (HTTPS), `path=/`; `domain` só quando `sessionCookieDomain` é configurado — sem ele os cookies são host-only e a sessão reinicia a cada troca de subdomínio
 - **Tier de memória:** último recurso quando cookie e localStorage estão bloqueados (Safari privado/ITP, iframe de terceiro, CMP pré-consentimento). Sem ele cada evento cunharia um `sessionId` novo
 - **Carimbo de atividade ausente:** um `sessionId` v4 válido sem `lastActivity` legível é tratado como sessão viva e recebe um novo carimbo, em vez de rotacionar

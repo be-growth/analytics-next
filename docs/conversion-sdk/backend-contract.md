@@ -165,7 +165,7 @@ function normalize(event: CollectEvent): FlatEvent {
 ### Redis session key
 
 O `context.sessionId` do evento é o **mesmo** usado pelo Redis/Collector para agregação.
-Formato UUID v4, sem transformação. TTL server-side alinhado com inatividade de 5min
+Formato UUID v4, sem transformação. TTL server-side alinhado com inatividade de 30min
 (+ margem para flush atrasado).
 
 ---
