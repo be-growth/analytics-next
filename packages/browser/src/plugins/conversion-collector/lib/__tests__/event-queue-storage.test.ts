@@ -71,6 +71,17 @@ describe('event-queue-storage', () => {
     )
   })
 
+  it('drops an oversized head but preserves later events', () => {
+    const oversized = sampleEvent('oversized')
+    oversized.properties = { payload: 'x'.repeat(2 * 1024 * 1024) }
+
+    writePersistedEventQueue([oversized, sampleEvent('later')])
+
+    expect(readPersistedEventQueue().map((event) => event.messageId)).toEqual([
+      'later',
+    ])
+  })
+
   it('ignores invalid persisted payloads', () => {
     window.localStorage.setItem(
       TAB_QUEUE_KEY,

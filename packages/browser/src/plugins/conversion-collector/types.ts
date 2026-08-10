@@ -8,7 +8,7 @@ export type CollectEvent = Record<string, unknown> & {
   _retryCount?: number
 }
 
-export type CollectDropReason = 'rejected' | 'retry_exhausted'
+export type CollectDropReason = 'rejected' | 'retry_exhausted' | 'oversized'
 
 export interface ConversionCollectorSettings {
   endpoint: string

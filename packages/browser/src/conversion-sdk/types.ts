@@ -1,9 +1,10 @@
 import type {
   CollectEvent,
+  CollectDropReason,
   ConversionCollectorSettings,
 } from '../plugins/conversion-collector/types'
 
-export type { CollectEvent, ConversionCollectorSettings }
+export type { CollectDropReason, CollectEvent, ConversionCollectorSettings }
 
 /** POST body: native analytics-next event array. */
 export type CollectRequestBody = CollectEvent[]
@@ -34,10 +35,7 @@ export interface AnalyticsInitConfig {
   /** Number of failed batch deliveries before dropping the batch. */
   maxEventRetries?: number
   /** Observes events dropped after a non-retryable response or retry exhaustion. */
-  onDrop?: (
-    events: CollectEvent[],
-    reason: 'rejected' | 'retry_exhausted'
-  ) => void
+  onDrop?: (events: CollectEvent[], reason: CollectDropReason) => void
   headers?: Record<string, string>
   getContext?: () => Record<string, unknown>
   getSessionId?: () => string

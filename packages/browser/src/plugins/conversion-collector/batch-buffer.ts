@@ -309,6 +309,18 @@ export class BatchBuffer {
         : { batch: this.peekBatch(this.queue.length), body: '' }
       const batchSize = batch.length
 
+      // A single event cannot be delivered through either unload transport
+      // when its serialized body exceeds the browser keepalive limit. Drop
+      // only that event so smaller events behind it can still be delivered.
+      if (
+        options?.unload &&
+        batch.length === 1 &&
+        byteLength(body) > BEACON_PAYLOAD_LIMIT_BYTES
+      ) {
+        this.discardBatch(1, 'oversized', syncPersist)
+        continue
+      }
+
       const onSuccess = () => {
         this.removeBatch(batchSize)
         this.persist(syncPersist)

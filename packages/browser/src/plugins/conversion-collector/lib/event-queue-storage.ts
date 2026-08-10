@@ -197,20 +197,39 @@ function isValidCollectEvent(value: unknown): value is CollectEvent {
  * and discarded exactly those.
  */
 function trimQueue(events: CollectEvent[]): CollectEvent[] {
-  let trimmed =
-    events.length > MAX_PERSISTED_EVENTS
-      ? events.slice(0, MAX_PERSISTED_EVENTS)
-      : events
+  const candidates = events.slice(0, MAX_PERSISTED_EVENTS)
+  const trimmed: CollectEvent[] = []
+  const dropped: CollectEvent[] = events.slice(candidates.length)
 
-  while (trimmed.length > 0) {
-    if (JSON.stringify(trimmed).length <= MAX_PERSISTED_BYTES) {
-      break
+  const byteLength = (value: string): number => {
+    if (typeof TextEncoder !== 'undefined') {
+      return new TextEncoder().encode(value).length
     }
-    trimmed = trimmed.slice(0, -1)
+    if (typeof Blob !== 'undefined') {
+      return new Blob([value]).size
+    }
+    return value.length
   }
 
-  if (trimmed.length < events.length) {
-    const dropped = events.slice(trimmed.length)
+  for (let index = 0; index < candidates.length; index += 1) {
+    const event = candidates[index]!
+    const candidate = [...trimmed, event]
+    if (byteLength(JSON.stringify(candidate)) <= MAX_PERSISTED_BYTES) {
+      trimmed.push(event)
+      continue
+    }
+
+    // Do not let one oversized event at the head evict every later event.
+    if (trimmed.length === 0) {
+      dropped.push(event)
+      continue
+    }
+
+    dropped.push(...candidates.slice(index))
+    break
+  }
+
+  if (dropped.length > 0 || trimmed.length < events.length) {
     console.warn(
       `[utua] dropped ${dropped.length} queued event(s): persistence cap`
     )

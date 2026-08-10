@@ -1,4 +1,4 @@
-import { BatchBuffer } from '../batch-buffer'
+import { BatchBuffer, type BatchBufferConfig } from '../batch-buffer'
 import { getTabQueueStorageKey } from '../lib/event-queue-storage'
 import type { CollectEvent } from '../types'
 
@@ -17,12 +17,13 @@ const sampleEvent = (overrides: Partial<CollectEvent> = {}): CollectEvent => ({
   ...overrides,
 })
 
-function createBuffer(): BatchBuffer {
+function createBuffer(overrides: Partial<BatchBufferConfig> = {}): BatchBuffer {
   return new BatchBuffer({
     endpoint,
     retryAttempts: 0,
     flushIntervalMs: 60_000,
     batchSize: 10,
+    ...overrides,
   })
 }
 
@@ -68,6 +69,7 @@ describe('BatchBuffer resilient transport', () => {
   })
 
   it('falls back to keepalive fetch when unload payload is over the beacon limit', async () => {
+    const onDrop = jest.fn()
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -80,7 +82,7 @@ describe('BatchBuffer resilient transport', () => {
       configurable: true,
     })
 
-    const buffer = createBuffer()
+    const buffer = createBuffer({ onDrop })
     buffer.enqueue(
       sampleEvent({ properties: { payload: 'x'.repeat(70 * 1024) } })
     )
@@ -88,9 +90,14 @@ describe('BatchBuffer resilient transport', () => {
     await buffer.flushAll({ unload: true })
 
     expect(beaconMock).not.toHaveBeenCalled()
-    expect(fetchMock).toHaveBeenCalledWith(
-      endpoint,
-      expect.objectContaining({ keepalive: true })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(onDrop).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          properties: { payload: expect.any(String) },
+        }),
+      ],
+      'oversized'
     )
     expect(buffer.getSize()).toBe(0)
   })
