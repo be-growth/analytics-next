@@ -1727,7 +1727,6 @@ function toCollectorSettings(config) {
         appName: config.appName,
         getContext: config.getContext,
         getSessionId: config.getSessionId,
-        sessionCookieDomain: config.sessionCookieDomain,
         getVisitorCountry: config.getVisitorCountry,
         defaultPhoneCountryCode: config.defaultPhoneCountryCode,
         isTrackingAllowed: config.isTrackingAllowed,
@@ -5408,8 +5407,7 @@ function appEnrichment(settings) {
 "use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   BatchBuffer: () => (/* binding */ BatchBuffer),
-/* harmony export */   DEFAULT_MAX_EVENT_RETRIES: () => (/* binding */ DEFAULT_MAX_EVENT_RETRIES)
+/* harmony export */   BatchBuffer: () => (/* binding */ BatchBuffer)
 /* harmony export */ });
 /* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! tslib */ 5478);
 /* harmony import */ var _lib_event_queue_storage__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./lib/event-queue-storage */ 4358);
@@ -5417,27 +5415,10 @@ __webpack_require__.r(__webpack_exports__);
 
 
 
-/**
- * Retryable failures bump `_retryCount` and keep the batch at the head of the
- * queue. Without a ceiling, a batch that always fails blocks every event behind
- * it forever, so past this many attempts the batch is dropped and the queue
- * moves on.
- */
-var DEFAULT_MAX_EVENT_RETRIES = 10;
 function incrementRetryCount(event) {
     var _a;
     var retryCount = ((_a = event._retryCount) !== null && _a !== void 0 ? _a : 0) + 1;
     return (0,tslib__WEBPACK_IMPORTED_MODULE_0__.__assign)((0,tslib__WEBPACK_IMPORTED_MODULE_0__.__assign)({}, event), { _retryCount: retryCount });
-}
-/** Serialized size in bytes — what the transport limits actually measure. */
-function byteLength(body) {
-    if (typeof TextEncoder !== 'undefined') {
-        return new TextEncoder().encode(body).length;
-    }
-    if (typeof Blob !== 'undefined') {
-        return new Blob([body]).size;
-    }
-    return body.length;
 }
 var BatchBuffer = /** @class */ (function () {
     function BatchBuffer(config) {
@@ -5453,9 +5434,9 @@ var BatchBuffer = /** @class */ (function () {
             return;
         }
         this.timer = setInterval(function () {
-            _this.scheduleFlush();
+            void _this.flush();
         }, this.config.flushIntervalMs);
-        this.scheduleFlush();
+        void this.flush();
     };
     BatchBuffer.prototype.stop = function () {
         if (this.timer) {
@@ -5463,30 +5444,15 @@ var BatchBuffer = /** @class */ (function () {
             this.timer = null;
         }
     };
-    /** True while the periodic flush is running — lets callers re-arm it. */
-    BatchBuffer.prototype.isRunning = function () {
-        return this.timer !== null;
-    };
     BatchBuffer.prototype.enqueue = function (event) {
         this.queue.push(event);
         this.persistQueue();
         if (this.queue.length >= this.config.batchSize) {
-            this.scheduleFlush();
+            void this.flush();
         }
     };
     BatchBuffer.prototype.getSize = function () {
         return this.queue.length;
-    };
-    /**
-     * Fire-and-forget flush. `flush()` rejects on delivery failure, and an
-     * unhandled rejection inside setInterval is both noisy and easy to mistake
-     * for a crash — failures are already retried on the next tick, so they are
-     * reported and swallowed here.
-     */
-    BatchBuffer.prototype.scheduleFlush = function () {
-        this.flush().catch(function (error) {
-            console.warn('[utua] collect flush failed:', error);
-        });
     };
     BatchBuffer.prototype.hydrateFromStorage = function () {
         var persisted = (0,_lib_event_queue_storage__WEBPACK_IMPORTED_MODULE_1__.readPersistedEventQueue)();
@@ -5501,14 +5467,6 @@ var BatchBuffer = /** @class */ (function () {
     BatchBuffer.prototype.persistQueueSync = function () {
         (0,_lib_event_queue_storage__WEBPACK_IMPORTED_MODULE_1__.writePersistedEventQueueSync)(this.queue);
     };
-    BatchBuffer.prototype.persist = function (sync) {
-        if (sync) {
-            this.persistQueueSync();
-        }
-        else {
-            this.persistQueue();
-        }
-    };
     BatchBuffer.prototype.peekBatch = function (maxSize) {
         if (maxSize === void 0) { maxSize = this.config.batchSize; }
         return this.queue.slice(0, maxSize);
@@ -5516,88 +5474,21 @@ var BatchBuffer = /** @class */ (function () {
     BatchBuffer.prototype.removeBatch = function (count) {
         this.queue.splice(0, count);
     };
-    /**
-     * Removes a batch that will never be delivered, so the events behind it can
-     * move. Dropping is deliberate: leaving a rejected batch at the head of a
-     * localStorage-backed queue stalls the browser permanently, across reloads.
-     */
-    BatchBuffer.prototype.discardBatch = function (count, reason, sync) {
-        var _a, _b;
-        var dropped = this.queue.splice(0, count);
-        this.persist(sync);
-        if (dropped.length === 0) {
-            return;
-        }
-        console.warn("[utua] dropped ".concat(dropped.length, " collect event(s): ").concat(reason));
-        (_b = (_a = this.config).onDrop) === null || _b === void 0 ? void 0 : _b.call(_a, dropped, reason);
-    };
-    Object.defineProperty(BatchBuffer.prototype, "maxEventRetries", {
-        get: function () {
-            var _a;
-            return (_a = this.config.maxEventRetries) !== null && _a !== void 0 ? _a : DEFAULT_MAX_EVENT_RETRIES;
-        },
-        enumerable: false,
-        configurable: true
-    });
-    /**
-     * Bumps the attempt counter on a failed batch and drops whatever exhausted
-     * its retries.
-     */
     BatchBuffer.prototype.bumpRetryInPlace = function (count, sync) {
-        var _a;
         if (sync === void 0) { sync = false; }
         for (var i = 0; i < count && i < this.queue.length; i += 1) {
             this.queue[i] = incrementRetryCount(this.queue[i]);
         }
-        var exhausted = 0;
-        while (exhausted < this.queue.length &&
-            ((_a = this.queue[exhausted]._retryCount) !== null && _a !== void 0 ? _a : 0) >= this.maxEventRetries) {
-            exhausted += 1;
+        if (sync) {
+            this.persistQueueSync();
         }
-        if (exhausted > 0) {
-            this.discardBatch(exhausted, 'retry_exhausted', sync);
-            return;
+        else {
+            this.persistQueue();
         }
-        this.persist(sync);
-    };
-    /**
-     * Largest prefix of the queue whose serialized body stays within `maxBytes`.
-     *
-     * Both unload transports cap the payload at 64 KB — `sendBeacon` refuses a
-     * larger blob outright, and `fetch` with `keepalive` is bound by the same
-     * limit in the spec. Sending the whole queue as one body (the previous
-     * behavior) therefore lost every large backlog at unload.
-     *
-     * Never returns an empty batch: a single oversized event is handed to the
-     * transport on its own, and the transport decides.
-     */
-    BatchBuffer.prototype.peekBatchWithinBytes = function (maxBytes) {
-        var full = this.peekBatch(this.queue.length);
-        var fullBody = (0,_send_events__WEBPACK_IMPORTED_MODULE_2__.buildCollectRequestBody)(full);
-        if (full.length <= 1 || byteLength(fullBody) <= maxBytes) {
-            return { batch: full, body: fullBody };
-        }
-        var head = full.slice(0, 1);
-        var best = { batch: head, body: (0,_send_events__WEBPACK_IMPORTED_MODULE_2__.buildCollectRequestBody)(head) };
-        var lo = 2;
-        var hi = full.length - 1;
-        while (lo <= hi) {
-            var mid = (lo + hi) >> 1;
-            var candidate = full.slice(0, mid);
-            var body = (0,_send_events__WEBPACK_IMPORTED_MODULE_2__.buildCollectRequestBody)(candidate);
-            if (byteLength(body) <= maxBytes) {
-                best = { batch: candidate, body: body };
-                lo = mid + 1;
-            }
-            else {
-                hi = mid - 1;
-            }
-        }
-        return best;
     };
     BatchBuffer.prototype.flush = function () {
         return (0,tslib__WEBPACK_IMPORTED_MODULE_0__.__awaiter)(this, void 0, Promise, function () {
-            var batch, batchSize, delivered, error_1;
+            var batch, batchSize, error_1;
             return (0,tslib__WEBPACK_IMPORTED_MODULE_0__.__generator)(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -5607,7 +5498,6 @@ var BatchBuffer = /** @class */ (function () {
                         this.flushing = true;
                         batch = this.peekBatch();
                         batchSize = batch.length;
-                        delivered = false;
                         _a.label = 1;
                     case 1:
                         _a.trys.push([1, 3, 4, 5]);
@@ -5616,28 +5506,19 @@ var BatchBuffer = /** @class */ (function () {
                         _a.sent();
                         this.removeBatch(batchSize);
                         this.persistQueue();
-                        delivered = true;
                         return [3 /*break*/, 5];
                     case 3:
                         error_1 = _a.sent();
                         if (error_1 instanceof _send_events__WEBPACK_IMPORTED_MODULE_2__.CollectDeliveryError && !error_1.retryable) {
-                            // A 4xx will fail identically forever. Keeping the batch would stall
-                            // every event behind it — including across reloads, since the queue is
-                            // persisted — so it is dropped and counted.
-                            this.discardBatch(batchSize, 'rejected', false);
+                            this.persistQueue();
                             throw error_1;
                         }
                         this.bumpRetryInPlace(batchSize);
                         throw error_1;
                     case 4:
                         this.flushing = false;
-                        // Drain the whole backlog instead of one batch per interval tick — but
-                        // only after a successful send. Chaining after a failure would retry as
-                        // fast as the event loop allows, and against an endpoint rejecting
-                        // everything it would empty the queue in one burst of doomed requests.
-                        // A failed batch waits for the next tick.
-                        if (delivered && this.queue.length > 0) {
-                            this.scheduleFlush();
+                        if (this.queue.length >= this.config.batchSize) {
+                            void this.flush();
                         }
                         return [7 /*endfinally*/];
                     case 5: return [2 /*return*/];
@@ -5647,11 +5528,6 @@ var BatchBuffer = /** @class */ (function () {
     };
     /**
      * Drains the queue. Uses sendBeacon on unload when the payload fits; otherwise keepalive fetch.
-     *
-     * Deliberately does NOT stop the interval: this also runs on
-     * `visibilitychange -> hidden`, which fires when the user merely switches
-     * tabs. Stopping here left the periodic flush dead for the rest of the page's
-     * life. The plugin's `unload()` owns `stop()`.
      */
     BatchBuffer.prototype.flushAll = function (options) {
         return (0,tslib__WEBPACK_IMPORTED_MODULE_0__.__awaiter)(this, void 0, Promise, function () {
@@ -5660,25 +5536,26 @@ var BatchBuffer = /** @class */ (function () {
             return (0,tslib__WEBPACK_IMPORTED_MODULE_0__.__generator)(this, function (_a) {
                 switch (_a.label) {
                     case 0:
+                        this.stop();
                         syncPersist = (options === null || options === void 0 ? void 0 : options.unload) === true;
                         _loop_1 = function () {
-                            var _b, batch, body, batchSize, onSuccess, onFailure, error_2, error_3;
-                            return (0,tslib__WEBPACK_IMPORTED_MODULE_0__.__generator)(this, function (_c) {
-                                switch (_c.label) {
+                            var batch, batchSize, body, onSuccess, onRetryableFailure, error_2, error_3;
+                            return (0,tslib__WEBPACK_IMPORTED_MODULE_0__.__generator)(this, function (_b) {
+                                switch (_b.label) {
                                     case 0:
-                                        _b = (options === null || options === void 0 ? void 0 : options.unload)
-                                            ? this_1.peekBatchWithinBytes(_send_events__WEBPACK_IMPORTED_MODULE_2__.BEACON_PAYLOAD_LIMIT_BYTES)
-                                            : { batch: this_1.peekBatch(this_1.queue.length), body: '' }, batch = _b.batch, body = _b.body;
+                                        batch = this_1.peekBatch(this_1.queue.length);
                                         batchSize = batch.length;
+                                        body = (0,_send_events__WEBPACK_IMPORTED_MODULE_2__.buildCollectRequestBody)(batch);
                                         onSuccess = function () {
                                             _this.removeBatch(batchSize);
-                                            _this.persist(syncPersist);
-                                        };
-                                        onFailure = function (error) {
-                                            if (error instanceof _send_events__WEBPACK_IMPORTED_MODULE_2__.CollectDeliveryError && !error.retryable) {
-                                                _this.discardBatch(batchSize, 'rejected', syncPersist);
-                                                return;
+                                            if (syncPersist) {
+                                                _this.persistQueueSync();
                                             }
+                                            else {
+                                                _this.persistQueue();
+                                            }
+                                        };
+                                        onRetryableFailure = function () {
                                             _this.bumpRetryInPlace(batchSize, syncPersist);
                                         };
                                         if (!(options === null || options === void 0 ? void 0 : options.unload)) return [3 /*break*/, 4];
@@ -5686,28 +5563,46 @@ var BatchBuffer = /** @class */ (function () {
                                             onSuccess();
                                             return [2 /*return*/, "continue"];
                                         }
-                                        _c.label = 1;
+                                        _b.label = 1;
                                     case 1:
-                                        _c.trys.push([1, 3, , 4]);
+                                        _b.trys.push([1, 3, , 4]);
                                         return [4 /*yield*/, (0,_send_events__WEBPACK_IMPORTED_MODULE_2__.deliverCollectPayload)(body, this_1.config, { keepalive: true })];
                                     case 2:
-                                        _c.sent();
+                                        _b.sent();
                                         onSuccess();
                                         return [2 /*return*/, "continue"];
                                     case 3:
-                                        error_2 = _c.sent();
-                                        onFailure(error_2);
+                                        error_2 = _b.sent();
+                                        if (error_2 instanceof _send_events__WEBPACK_IMPORTED_MODULE_2__.CollectDeliveryError && !error_2.retryable) {
+                                            if (syncPersist) {
+                                                this_1.persistQueueSync();
+                                            }
+                                            else {
+                                                this_1.persistQueue();
+                                            }
+                                            throw error_2;
+                                        }
+                                        onRetryableFailure();
                                         throw error_2;
                                     case 4:
-                                        _c.trys.push([4, 6, , 7]);
+                                        _b.trys.push([4, 6, , 7]);
                                         return [4 /*yield*/, (0,_send_events__WEBPACK_IMPORTED_MODULE_2__.sendEventsToCollect)(batch, this_1.config)];
                                     case 5:
-                                        _c.sent();
+                                        _b.sent();
                                         onSuccess();
                                         return [3 /*break*/, 7];
                                     case 6:
-                                        error_3 = _c.sent();
-                                        onFailure(error_3);
+                                        error_3 = _b.sent();
+                                        if (error_3 instanceof _send_events__WEBPACK_IMPORTED_MODULE_2__.CollectDeliveryError && !error_3.retryable) {
+                                            if (syncPersist) {
+                                                this_1.persistQueueSync();
+                                            }
+                                            else {
+                                                this_1.persistQueue();
+                                            }
+                                            throw error_3;
+                                        }
+                                        onRetryableFailure();
                                         throw error_3;
                                     case 7: return [2 /*return*/];
                                 }
@@ -5785,15 +5680,6 @@ __webpack_require__.r(__webpack_exports__);
 var DEFAULT_FLUSH_INTERVAL_MS = 3000;
 var DEFAULT_BATCH_SIZE = 10;
 var DEFAULT_RETRY_ATTEMPTS = 2;
-/**
- * Flushes on the events that precede a page going away, and re-arms the
- * periodic flush when it comes back.
- *
- * `visibilitychange` fires on an ordinary tab switch, not just on navigation,
- * so hiding is not the end of the page's life — the buffer has to keep
- * draining after the user returns. `pageshow` covers the bfcache restore,
- * where the page resumes without ever running `load()` again.
- */
 function registerUnloadFlush(buffer) {
     if (typeof window === 'undefined' ||
         typeof document === 'undefined' ||
@@ -5801,26 +5687,18 @@ function registerUnloadFlush(buffer) {
         return function () { return undefined; };
     }
     var flushOnUnload = function () {
-        void buffer.flushAll({ unload: true }).catch(function () { return undefined; });
-    };
-    var resume = function () {
-        buffer.start();
+        void buffer.flushAll({ unload: true });
     };
     var onVisibilityChange = function () {
         if (document.visibilityState === 'hidden') {
             flushOnUnload();
         }
-        else {
-            resume();
-        }
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('pagehide', flushOnUnload);
-    window.addEventListener('pageshow', resume);
     return function () {
         document.removeEventListener('visibilitychange', onVisibilityChange);
         window.removeEventListener('pagehide', flushOnUnload);
-        window.removeEventListener('pageshow', resume);
     };
 }
 function conversionCollectorPlugin(settings) {
@@ -5887,9 +5765,6 @@ function conversionCollectorPlugin(settings) {
         unload: function () {
             removeUnloadListeners === null || removeUnloadListeners === void 0 ? void 0 : removeUnloadListeners();
             removeUnloadListeners = undefined;
-            // This is the one place the buffer is really done — `flushAll` no longer
-            // stops the timer itself, because it also runs on plain tab switches.
-            buffer.stop();
             return buffer.flushAll({ unload: true }).then(function () { return undefined; });
         },
         track: function (ctx) { return deliver(ctx, false); },
@@ -6035,15 +5910,14 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! tslib */ 5478);
 /* harmony import */ var _lib_resolve_context__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../lib/resolve-context */ 2754);
 /* harmony import */ var _lib_session__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../lib/session */ 1644);
-/* harmony import */ var _session_enrichment_resolve_session_id__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../session-enrichment/resolve-session-id */ 1866);
-
+/* harmony import */ var _lib_session__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../lib/session */ 6217);
 
 
 
 function conversionContextEnrichment(settings) {
     var analytics;
     var enrich = function (ctx) {
-        var _a;
+        var _a, _b, _c;
         if (!analytics) {
             return ctx;
         }
@@ -6052,13 +5926,9 @@ function conversionContextEnrichment(settings) {
             analytics.user().anonymousId(bgAnonymousId);
         }
         ctx.updateEvent('anonymousId', bgAnonymousId);
-        var sessionId = (0,_session_enrichment_resolve_session_id__WEBPACK_IMPORTED_MODULE_1__.resolveSessionId)(settings, function (received) {
-            return ctx.log('warn', 'getSessionId returned an invalid session id', {
-                received: received,
-            });
-        });
+        var sessionId = (_b = (_a = settings.getSessionId) === null || _a === void 0 ? void 0 : _a.call(settings)) !== null && _b !== void 0 ? _b : (0,_lib_session__WEBPACK_IMPORTED_MODULE_1__.getOrCreateSessionId)();
         var resolved = (0,_lib_resolve_context__WEBPACK_IMPORTED_MODULE_2__.resolveContext)(settings);
-        var evtCtx = (_a = ctx.event.context) !== null && _a !== void 0 ? _a : {};
+        var evtCtx = (_c = ctx.event.context) !== null && _c !== void 0 ? _c : {};
         ctx.updateEvent('context', (0,tslib__WEBPACK_IMPORTED_MODULE_3__.__assign)((0,tslib__WEBPACK_IMPORTED_MODULE_3__.__assign)((0,tslib__WEBPACK_IMPORTED_MODULE_3__.__assign)({}, evtCtx), resolved), { sessionId: sessionId }));
         var traits = analytics.user().traits();
         if (traits && Object.keys(traits).length > 0) {
@@ -6672,69 +6542,20 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   MAX_PERSISTED_BYTES: () => (/* binding */ MAX_PERSISTED_BYTES),
 /* harmony export */   MAX_PERSISTED_EVENTS: () => (/* binding */ MAX_PERSISTED_EVENTS),
 /* harmony export */   clearPersistedEventQueue: () => (/* binding */ clearPersistedEventQueue),
-/* harmony export */   getTabQueueStorageKey: () => (/* binding */ getTabQueueStorageKey),
 /* harmony export */   readPersistedEventQueue: () => (/* binding */ readPersistedEventQueue),
-/* harmony export */   setQueueTrimHandler: () => (/* binding */ setQueueTrimHandler),
 /* harmony export */   writePersistedEventQueue: () => (/* binding */ writePersistedEventQueue),
 /* harmony export */   writePersistedEventQueueSync: () => (/* binding */ writePersistedEventQueueSync)
 /* harmony export */ });
-/* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! tslib */ 5478);
-
-/**
- * Legacy single-key queue, written by SDK versions before the per-tab split.
- * Still read once on boot so an upgrade does not strand a pending backlog; it
- * is never written again.
- */
 var EVENT_QUEUE_STORAGE_KEY = 'utua_event_queue';
-/**
- * Each tab owns its own queue key.
- *
- * The previous design had every tab write the shared key with its own in-memory
- * queue, so the last writer silently erased whatever the other tab had pending
- * — the mutex below is best-effort and cannot prevent it. Partitioning by owner
- * removes the race at the source: a tab only ever overwrites its own events.
- * Cross-tab merging is not an option here, because a write also has to be able
- * to REMOVE delivered events; merging would resurrect them.
- */
-var QUEUE_KEY_PREFIX = 'utua_event_queue::';
 var MAX_PERSISTED_EVENTS = 100;
 var MAX_PERSISTED_BYTES = 1024 * 1024;
-/**
- * A queue whose owner has not written for this long is treated as abandoned
- * (tab closed or crashed) and adopted by whichever tab boots next. Generous on
- * purpose: adopting a queue that is merely idle produces duplicates, which the
- * worker's message_id dedup absorbs, while adopting too late produces nothing
- * worse than a delay.
- */
-var ORPHAN_QUEUE_MS = 5 * 60 * 1000;
-/** Bound on how many abandoned queues a single boot will adopt. */
-var MAX_ADOPTED_QUEUES = 20;
-// Deliberately not under QUEUE_KEY_PREFIX: the prefix scan must not see it.
-var QUEUE_MUTEX_KEY = 'utua_event_queue_lock';
+var QUEUE_MUTEX_KEY = 'utua_event_queue:lock';
 var LOCK_TIMEOUT_MS = 50;
 var MAX_LOCK_ATTEMPTS = 3;
 var TAB_LOCK_OWNER = "".concat(Date.now(), "-").concat(Math.random());
-var TAB_QUEUE_KEY = "".concat(QUEUE_KEY_PREFIX).concat(TAB_LOCK_OWNER);
-/** Storage key this tab persists to. Exposed for tests and diagnostics. */
-function getTabQueueStorageKey() {
-    return TAB_QUEUE_KEY;
-}
-/**
- * Called when events are dropped by the size/count caps. This is silent data
- * loss otherwise — the host wires it to telemetry.
- */
-var onTrim;
-function setQueueTrimHandler(handler) {
-    onTrim = handler;
-}
 /**
  * Best-effort cross-tab mutex via localStorage. Not a true CAS lock — two tabs
- * can still race — but each tab only releases locks it owns. With per-tab keys
- * it now only guards orphan adoption, where a race costs a duplicate rather
- * than a lost event.
- *
- * The Web Locks API would be a real mutex, but it is Promise-based and the
- * unload path (`writePersistedEventQueueSync`) has to stay synchronous.
+ * can still race — but each tab only releases locks it owns.
  */
 function isBrowserStorageAvailable() {
     if (typeof window === 'undefined') {
@@ -6814,30 +6635,16 @@ function isValidCollectEvent(value) {
         typeof event.anonymousId === 'string' &&
         typeof event.timestamp === 'string');
 }
-/**
- * Enforces the count and byte caps, dropping from the TAIL.
- *
- * The queue is consumed FIFO from the head, so the head holds the oldest
- * undelivered events — including the entry `page` that carries the campaign
- * attribution for the whole session. The previous `slice(-MAX)` kept the newest
- * and discarded exactly those.
- */
 function trimQueue(events) {
-    var trimmed = events.length > MAX_PERSISTED_EVENTS
-        ? events.slice(0, MAX_PERSISTED_EVENTS)
-        : events;
+    var trimmed = events.slice(-MAX_PERSISTED_EVENTS);
     while (trimmed.length > 0) {
-        if (JSON.stringify(trimmed).length <= MAX_PERSISTED_BYTES) {
-            break;
+        var serialized = JSON.stringify(trimmed);
+        if (serialized.length <= MAX_PERSISTED_BYTES) {
+            return trimmed;
         }
-        trimmed = trimmed.slice(0, -1);
+        trimmed = trimmed.slice(1);
     }
-    if (trimmed.length < events.length) {
-        var dropped = events.slice(trimmed.length);
-        console.warn("[utua] dropped ".concat(dropped.length, " queued event(s): persistence cap"));
-        onTrim === null || onTrim === void 0 ? void 0 : onTrim(dropped);
-    }
-    return trimmed;
+    return [];
 }
 function writeQueueToStorage(events) {
     if (!isBrowserStorageAvailable()) {
@@ -6845,121 +6652,19 @@ function writeQueueToStorage(events) {
     }
     try {
         if (events.length === 0) {
-            window.localStorage.removeItem(TAB_QUEUE_KEY);
+            window.localStorage.removeItem(EVENT_QUEUE_STORAGE_KEY);
             return;
         }
         var trimmed = trimQueue(events);
         if (trimmed.length === 0) {
-            window.localStorage.removeItem(TAB_QUEUE_KEY);
+            window.localStorage.removeItem(EVENT_QUEUE_STORAGE_KEY);
             return;
         }
-        var payload = {
-            owner: TAB_LOCK_OWNER,
-            updatedAt: Date.now(),
-            events: trimmed,
-        };
-        window.localStorage.setItem(TAB_QUEUE_KEY, JSON.stringify(payload));
+        window.localStorage.setItem(EVENT_QUEUE_STORAGE_KEY, JSON.stringify(trimmed));
     }
     catch (_a) {
         // Quota exceeded or storage blocked — drop persistence silently.
     }
-}
-/** Accepts both the per-tab envelope and the legacy bare array. */
-function parseStoredQueue(raw) {
-    if (!raw) {
-        return null;
-    }
-    try {
-        var parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-            return {
-                owner: '',
-                updatedAt: 0,
-                events: parsed.filter(isValidCollectEvent),
-            };
-        }
-        if (parsed && typeof parsed === 'object') {
-            var envelope = parsed;
-            if (!Array.isArray(envelope.events)) {
-                return null;
-            }
-            return {
-                owner: typeof envelope.owner === 'string' ? envelope.owner : '',
-                updatedAt: typeof envelope.updatedAt === 'number' ? envelope.updatedAt : 0,
-                events: envelope.events.filter(isValidCollectEvent),
-            };
-        }
-    }
-    catch (_a) {
-        // fall through
-    }
-    return null;
-}
-function queueKeys() {
-    var keys = [];
-    for (var i = 0; i < window.localStorage.length; i += 1) {
-        var key = window.localStorage.key(i);
-        if (key && key.startsWith(QUEUE_KEY_PREFIX)) {
-            keys.push(key);
-        }
-    }
-    return keys;
-}
-/**
- * Reads this tab's queue, then adopts anything left behind by tabs that are
- * gone — including the pre-split legacy key. Adopted keys are removed so a
- * third tab does not pick them up again.
- *
- * Order matters: this tab's own events come first, and adopted ones are
- * appended, so the local FIFO ordering survives. Events are deduped by
- * messageId, since the same backlog can legitimately appear twice.
- */
-function collectQueues() {
-    var own = parseStoredQueue(window.localStorage.getItem(TAB_QUEUE_KEY));
-    var result = own ? (0,tslib__WEBPACK_IMPORTED_MODULE_0__.__spreadArray)([], own.events, true) : [];
-    var seen = new Set(result.map(function (event) { return event.messageId; }));
-    var now = Date.now();
-    var adoptable = [EVENT_QUEUE_STORAGE_KEY];
-    for (var _i = 0, _a = queueKeys(); _i < _a.length; _i++) {
-        var key = _a[_i];
-        if (key !== TAB_QUEUE_KEY) {
-            adoptable.push(key);
-        }
-    }
-    var adopted = 0;
-    for (var _b = 0, adoptable_1 = adoptable; _b < adoptable_1.length; _b++) {
-        var key = adoptable_1[_b];
-        if (adopted >= MAX_ADOPTED_QUEUES) {
-            break;
-        }
-        var stored = parseStoredQueue(window.localStorage.getItem(key));
-        if (!stored) {
-            continue;
-        }
-        // A live tab's queue is left alone; only abandoned ones are taken over.
-        // The legacy key has updatedAt = 0, so it is always adoptable.
-        if (stored.updatedAt !== 0 && now - stored.updatedAt < ORPHAN_QUEUE_MS) {
-            continue;
-        }
-        adopted += 1;
-        try {
-            window.localStorage.removeItem(key);
-        }
-        catch (_c) {
-            // storage blocked — the events are still adopted in memory
-        }
-        for (var _d = 0, _e = stored.events; _d < _e.length; _d++) {
-            var event = _e[_d];
-            if (event.messageId != null && seen.has(event.messageId)) {
-                continue;
-            }
-            if (event.messageId != null) {
-                seen.add(event.messageId);
-            }
-            result.push(event);
-        }
-    }
-    return result;
 }
 function readPersistedEventQueue() {
     if (!isBrowserStorageAvailable()) {
@@ -6968,7 +6673,17 @@ function readPersistedEventQueue() {
     var result = [];
     withStorageMutex(function () {
         try {
-            result = collectQueues();
+            var raw = window.localStorage.getItem(EVENT_QUEUE_STORAGE_KEY);
+            if (!raw) {
+                result = [];
+                return;
+            }
+            var parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+                result = [];
+                return;
+            }
+            result = parsed.filter(isValidCollectEvent);
         }
         catch (_a) {
             result = [];
@@ -6980,12 +6695,26 @@ function writePersistedEventQueue(events) {
     if (!isBrowserStorageAvailable()) {
         return;
     }
-    // No mutex: this tab is the only writer of its own key.
-    writeQueueToStorage(events);
+    withStorageMutex(function () {
+        writeQueueToStorage(events);
+    });
 }
 /** Synchronous write for page unload — avoids deferred mutex retries. */
 function writePersistedEventQueueSync(events) {
-    writePersistedEventQueue(events);
+    if (!isBrowserStorageAvailable()) {
+        return;
+    }
+    var now = Date.now();
+    if (tryAcquireLock(now)) {
+        try {
+            writeQueueToStorage(events);
+        }
+        finally {
+            releaseOwnedLock();
+        }
+        return;
+    }
+    writeQueueToStorage(events);
 }
 function clearPersistedEventQueue() {
     if (!isBrowserStorageAvailable()) {
@@ -6993,7 +6722,6 @@ function clearPersistedEventQueue() {
     }
     withStorageMutex(function () {
         try {
-            window.localStorage.removeItem(TAB_QUEUE_KEY);
             window.localStorage.removeItem(EVENT_QUEUE_STORAGE_KEY);
         }
         catch (_a) {
@@ -7285,8 +7013,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   SESSION_INACTIVITY_TTL_MS: () => (/* reexport safe */ _session_enrichment_session_manager__WEBPACK_IMPORTED_MODULE_0__.SESSION_INACTIVITY_MS),
 /* harmony export */   getCurrentSessionId: () => (/* reexport safe */ _session_enrichment_session_manager__WEBPACK_IMPORTED_MODULE_0__.getCurrentSessionId),
 /* harmony export */   getOrCreateAnonymousId: () => (/* binding */ getOrCreateAnonymousId),
-/* harmony export */   getOrCreateSessionId: () => (/* reexport safe */ _session_enrichment_session_manager__WEBPACK_IMPORTED_MODULE_0__.getOrCreateSessionId),
-/* harmony export */   resetSessionMemory: () => (/* reexport safe */ _session_enrichment_session_manager__WEBPACK_IMPORTED_MODULE_0__.resetSessionMemory)
+/* harmony export */   getOrCreateSessionId: () => (/* reexport safe */ _session_enrichment_session_manager__WEBPACK_IMPORTED_MODULE_0__.getOrCreateSessionId)
 /* harmony export */ });
 /* harmony import */ var _uuid__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./uuid */ 5129);
 /* harmony import */ var _session_enrichment_session_manager__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../session-enrichment/session-manager */ 6217);
@@ -7720,28 +7447,22 @@ function sendEventsToCollect(events, config, transport) {
 "use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   ACTIVITY_COOKIE: () => (/* reexport safe */ _session_manager__WEBPACK_IMPORTED_MODULE_2__.ACTIVITY_COOKIE),
-/* harmony export */   SESSION_COOKIE: () => (/* reexport safe */ _session_manager__WEBPACK_IMPORTED_MODULE_2__.SESSION_COOKIE),
-/* harmony export */   SESSION_INACTIVITY_MS: () => (/* reexport safe */ _session_manager__WEBPACK_IMPORTED_MODULE_2__.SESSION_INACTIVITY_MS),
-/* harmony export */   getOrCreateSessionId: () => (/* reexport safe */ _session_manager__WEBPACK_IMPORTED_MODULE_2__.getOrCreateSessionId),
-/* harmony export */   resetSessionMemory: () => (/* reexport safe */ _session_manager__WEBPACK_IMPORTED_MODULE_2__.resetSessionMemory),
-/* harmony export */   resolveSessionId: () => (/* reexport safe */ _resolve_session_id__WEBPACK_IMPORTED_MODULE_0__.resolveSessionId),
+/* harmony export */   ACTIVITY_COOKIE: () => (/* reexport safe */ _session_manager__WEBPACK_IMPORTED_MODULE_0__.ACTIVITY_COOKIE),
+/* harmony export */   SESSION_COOKIE: () => (/* reexport safe */ _session_manager__WEBPACK_IMPORTED_MODULE_0__.SESSION_COOKIE),
+/* harmony export */   SESSION_INACTIVITY_MS: () => (/* reexport safe */ _session_manager__WEBPACK_IMPORTED_MODULE_0__.SESSION_INACTIVITY_MS),
+/* harmony export */   getOrCreateSessionId: () => (/* reexport safe */ _session_manager__WEBPACK_IMPORTED_MODULE_0__.getOrCreateSessionId),
 /* harmony export */   sessionEnrichment: () => (/* binding */ sessionEnrichment)
 /* harmony export */ });
 /* harmony import */ var tslib__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! tslib */ 5478);
-/* harmony import */ var _resolve_session_id__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./resolve-session-id */ 1866);
-/* harmony import */ var _session_manager__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./session-manager */ 6217);
+/* harmony import */ var _session_manager__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./session-manager */ 6217);
 
 
 function sessionEnrichment(settings) {
+    var currentSessionId = '';
     var enrich = function (ctx) {
-        var _a;
-        var currentSessionId = (0,_resolve_session_id__WEBPACK_IMPORTED_MODULE_0__.resolveSessionId)(settings, function (received) {
-            return ctx.log('warn', 'getSessionId returned an invalid session id', {
-                received: received,
-            });
-        });
-        var evtCtx = (_a = ctx.event.context) !== null && _a !== void 0 ? _a : {};
+        var _a, _b, _c;
+        currentSessionId = (_b = (_a = settings.getSessionId) === null || _a === void 0 ? void 0 : _a.call(settings)) !== null && _b !== void 0 ? _b : (0,_session_manager__WEBPACK_IMPORTED_MODULE_0__.getOrCreateSessionId)();
+        var evtCtx = (_c = ctx.event.context) !== null && _c !== void 0 ? _c : {};
         ctx.updateEvent('context', (0,tslib__WEBPACK_IMPORTED_MODULE_1__.__assign)((0,tslib__WEBPACK_IMPORTED_MODULE_1__.__assign)({}, evtCtx), { sessionId: currentSessionId }));
         return ctx;
     };
@@ -7763,66 +7484,6 @@ function sessionEnrichment(settings) {
 
 
 
-
-/***/ }),
-
-/***/ 1866:
-/*!***********************************************************************************!*\
-  !*** ./src/plugins/conversion-collector/session-enrichment/resolve-session-id.ts ***!
-  \***********************************************************************************/
-/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
-
-"use strict";
-__webpack_require__.r(__webpack_exports__);
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   resolveSessionId: () => (/* binding */ resolveSessionId)
-/* harmony export */ });
-/* harmony import */ var _lib_uuid__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../lib/uuid */ 5129);
-/* harmony import */ var _session_manager__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./session-manager */ 6217);
-
-
-/**
- * Resolves the session id for an event, preferring the host-supplied
- * `getSessionId` override.
- *
- * The override is validated because the collector rejects anything that is not a
- * UUID v4 (`invalid_session_id`) — an empty string or a legacy id would fail the
- * whole batch, so falling back to the cookie-backed session is strictly better.
- *
- * It is also called inside a try/catch, and that matters more than it looks:
- * `sessionEnrichment` runs as an `enrichment` plugin, and the core executes
- * those through `attempt()`, which logs a thrown error and lets the event
- * continue. A host override that throws would therefore ship every event to the
- * collector with no `context.sessionId` at all — silently, and for that whole
- * site. This function must never throw.
- */
-function resolveSessionId(settings, onInvalidOverride) {
-    var _a;
-    try {
-        var custom = (_a = settings.getSessionId) === null || _a === void 0 ? void 0 : _a.call(settings);
-        if (custom) {
-            if ((0,_lib_uuid__WEBPACK_IMPORTED_MODULE_0__.isValidUuidV4)(custom)) {
-                return custom;
-            }
-            onInvalidOverride === null || onInvalidOverride === void 0 ? void 0 : onInvalidOverride(custom);
-        }
-    }
-    catch (error) {
-        onInvalidOverride === null || onInvalidOverride === void 0 ? void 0 : onInvalidOverride("threw: ".concat(String(error)));
-    }
-    try {
-        return (0,_session_manager__WEBPACK_IMPORTED_MODULE_1__.getOrCreateSessionId)({ cookieDomain: settings.sessionCookieDomain });
-    }
-    catch (error) {
-        // Last resort: a session-less event is invisible downstream (the
-        // session_profiles materialized views filter `session_id != ''`), so an
-        // ephemeral id is strictly better than none.
-        onInvalidOverride === null || onInvalidOverride === void 0 ? void 0 : onInvalidOverride("session manager threw: ".concat(String(error)));
-        return (0,_lib_uuid__WEBPACK_IMPORTED_MODULE_0__.generateUuidV4)();
-    }
-}
-
-
 /***/ }),
 
 /***/ 6217:
@@ -7841,8 +7502,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */   SESSION_INACTIVITY_MS: () => (/* binding */ SESSION_INACTIVITY_MS),
 /* harmony export */   SESSION_LS_KEY: () => (/* binding */ SESSION_LS_KEY),
 /* harmony export */   getCurrentSessionId: () => (/* binding */ getCurrentSessionId),
-/* harmony export */   getOrCreateSessionId: () => (/* binding */ getOrCreateSessionId),
-/* harmony export */   resetSessionMemory: () => (/* binding */ resetSessionMemory)
+/* harmony export */   getOrCreateSessionId: () => (/* binding */ getOrCreateSessionId)
 /* harmony export */ });
 /* harmony import */ var _lib_uuid__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../lib/uuid */ 5129);
 
@@ -7850,47 +7510,19 @@ var SESSION_COOKIE = '_utua_session';
 var ACTIVITY_COOKIE = '_utua_last_activity';
 var SESSION_LS_KEY = 'utua_session';
 var ACTIVITY_LS_KEY = 'utua_last_activity';
-/**
- * Inactivity window — must match the worker's `SESSION_INACTIVITY_TTL`
- * (30 minutes), which governs the Redis `session:` keys the finalizer reads.
- *
- * It used to be 5 minutes here against 30 in the worker. The browser rotated
- * the id four times inside one window the backend still considered a single
- * live session, so an ordinary 20-minute visit with reading pauses landed in
- * ClickHouse as several sessions — inflating session counts and splitting the
- * attribution across them.
- */
-var SESSION_INACTIVITY_MS = 30 * 60 * 1000;
-/**
- * Cookie max-age safety net. Deliberately longer than the inactivity window:
- * at equal values a user idling just under the window would find the cookie
- * already expired and start a new session anyway. The cookie is rewritten on
- * every event (see touchSessionStorage), so the extra margin never extends a
- * session on its own — expiry is decided by the inactivity logic.
- */
-var SESSION_COOKIE_MAX_AGE_SEC = 45 * 60;
-/**
- * Last-resort tier: keeps the session stable within a page load when cookies and
- * localStorage are both unavailable (Safari private mode/ITP, third-party iframe,
- * CMP blocking storage before consent). Without it every event mints a new id.
- */
-var memorySessionId = null;
-var memoryLastActivity = 0;
-var hostOnlyCookiesCleared = false;
+/** Inactivity window — aligned with PRD / Redis finalizer (5 minutes). */
+var SESSION_INACTIVITY_MS = 5 * 60 * 1000;
+/** Cookie max-age safety net (30 minutes). Real expiry is inactivity logic. */
+var SESSION_COOKIE_MAX_AGE_SEC = 30 * 60;
 function getCookie(name) {
     if (typeof document === 'undefined') {
         return null;
     }
-    try {
-        var escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        var match = document.cookie.match(new RegExp("(?:^|; )".concat(escaped, "=([^;]*)")));
-        return (match === null || match === void 0 ? void 0 : match[1]) != null ? decodeURIComponent(match[1]) : null;
-    }
-    catch (_a) {
-        return null;
-    }
+    var escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    var match = document.cookie.match(new RegExp("(?:^|; )".concat(escaped, "=([^;]*)")));
+    return (match === null || match === void 0 ? void 0 : match[1]) != null ? decodeURIComponent(match[1]) : null;
 }
-function setCookie(name, value, maxAgeSeconds, domain) {
+function setCookie(name, value, maxAgeSeconds) {
     var _a;
     if (typeof document === 'undefined') {
         return;
@@ -7899,34 +7531,7 @@ function setCookie(name, value, maxAgeSeconds, domain) {
     var secure = typeof window !== 'undefined' && ((_a = window.location) === null || _a === void 0 ? void 0 : _a.protocol) === 'https:'
         ? '; Secure'
         : '';
-    var domainAttr = domain ? "; domain=".concat(domain) : '';
-    try {
-        document.cookie = "".concat(encodeURIComponent(name), "=").concat(encodeURIComponent(value), "; path=/").concat(domainAttr, "; max-age=").concat(maxAge, "; SameSite=Lax").concat(secure);
-    }
-    catch (_b) {
-        // cookies blocked
-    }
-}
-/**
- * A host-only cookie and a `domain=` cookie coexist under the same name, and the
- * order `document.cookie` returns them in is unspecified — so a leftover host-only
- * cookie would make reads flip between two sessions. Drop it once per page load,
- * after the current session has already been read.
- */
-function clearHostOnlyCookies() {
-    if (hostOnlyCookiesCleared || typeof document === 'undefined') {
-        return;
-    }
-    hostOnlyCookiesCleared = true;
-    try {
-        for (var _i = 0, _a = [SESSION_COOKIE, ACTIVITY_COOKIE]; _i < _a.length; _i++) {
-            var name = _a[_i];
-            document.cookie = "".concat(encodeURIComponent(name), "=; path=/; max-age=0; SameSite=Lax");
-        }
-    }
-    catch (_b) {
-        // cookies blocked
-    }
+    document.cookie = "".concat(encodeURIComponent(name), "=").concat(encodeURIComponent(value), "; path=/; max-age=").concat(maxAge, "; SameSite=Lax").concat(secure);
 }
 function readLs(key) {
     var _a, _b;
@@ -7946,68 +7551,44 @@ function writeLs(key, value) {
         // storage blocked
     }
 }
-function toTimestamp(raw) {
-    var parsed = Number(raw);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-}
-function touchSessionStorage(sessionId, activityMs, cookieDomain) {
-    memorySessionId = sessionId;
-    memoryLastActivity = activityMs;
-    if (cookieDomain) {
-        clearHostOnlyCookies();
-    }
-    setCookie(SESSION_COOKIE, sessionId, SESSION_COOKIE_MAX_AGE_SEC, cookieDomain);
-    setCookie(ACTIVITY_COOKIE, String(activityMs), SESSION_COOKIE_MAX_AGE_SEC, cookieDomain);
+function touchSessionStorage(sessionId, activityMs) {
+    setCookie(SESSION_COOKIE, sessionId, SESSION_COOKIE_MAX_AGE_SEC);
+    setCookie(ACTIVITY_COOKIE, String(activityMs), SESSION_COOKIE_MAX_AGE_SEC);
     writeLs(SESSION_LS_KEY, sessionId);
     writeLs(ACTIVITY_LS_KEY, String(activityMs));
 }
-/**
- * Picks the first tier that holds a session id: cookie → localStorage → memory.
- * A missing/unparseable activity stamp yields `0`, which callers treat as "alive"
- * rather than expired — losing the stamp alone must not rotate a valid session.
- */
 function readSessionPair() {
     var cookieId = getCookie(SESSION_COOKIE);
-    if (cookieId) {
-        return {
-            sessionId: cookieId,
-            lastActivity: toTimestamp(getCookie(ACTIVITY_COOKIE)),
-        };
+    var cookieActivity = getCookie(ACTIVITY_COOKIE);
+    if (cookieId && cookieActivity) {
+        return { sessionId: cookieId, lastActivity: Number(cookieActivity) };
     }
     var lsId = readLs(SESSION_LS_KEY);
-    if (lsId) {
-        return {
-            sessionId: lsId,
-            lastActivity: toTimestamp(readLs(ACTIVITY_LS_KEY)),
-        };
-    }
-    if (memorySessionId) {
-        return { sessionId: memorySessionId, lastActivity: memoryLastActivity };
+    var lsActivity = readLs(ACTIVITY_LS_KEY);
+    if (lsId && lsActivity) {
+        return { sessionId: lsId, lastActivity: Number(lsActivity) };
     }
     return { sessionId: null, lastActivity: 0 };
 }
 function getCurrentSessionId() {
-    var _a, _b;
+    var _a;
     if (typeof window === 'undefined') {
         return undefined;
     }
     try {
-        var existingId = (_b = (_a = getCookie(SESSION_COOKIE)) !== null && _a !== void 0 ? _a : readLs(SESSION_LS_KEY)) !== null && _b !== void 0 ? _b : memorySessionId;
+        var existingId = (_a = getCookie(SESSION_COOKIE)) !== null && _a !== void 0 ? _a : readLs(SESSION_LS_KEY);
         if (existingId && (0,_lib_uuid__WEBPACK_IMPORTED_MODULE_0__.isValidUuidV4)(existingId)) {
             return existingId;
         }
     }
-    catch (_c) {
+    catch (_b) {
         // ignore
     }
     return undefined;
 }
-function getOrCreateSessionId(optionsOrCustom) {
-    var options = typeof optionsOrCustom === 'function'
-        ? { custom: optionsOrCustom }
-        : optionsOrCustom !== null && optionsOrCustom !== void 0 ? optionsOrCustom : {};
-    if (options.custom) {
-        return options.custom();
+function getOrCreateSessionId(custom) {
+    if (custom) {
+        return custom();
     }
     if (typeof window === 'undefined') {
         return (0,_lib_uuid__WEBPACK_IMPORTED_MODULE_0__.generateUuidV4)();
@@ -8017,8 +7598,9 @@ function getOrCreateSessionId(optionsOrCustom) {
         var _a = readSessionPair(), existingId = _a.sessionId, lastActivity = _a.lastActivity;
         if (existingId &&
             (0,_lib_uuid__WEBPACK_IMPORTED_MODULE_0__.isValidUuidV4)(existingId) &&
-            (lastActivity === 0 || now - lastActivity <= SESSION_INACTIVITY_MS)) {
-            touchSessionStorage(existingId, now, options.cookieDomain);
+            lastActivity > 0 &&
+            now - lastActivity <= SESSION_INACTIVITY_MS) {
+            touchSessionStorage(existingId, now);
             return existingId;
         }
     }
@@ -8027,18 +7609,12 @@ function getOrCreateSessionId(optionsOrCustom) {
     }
     var nextId = (0,_lib_uuid__WEBPACK_IMPORTED_MODULE_0__.generateUuidV4)();
     try {
-        touchSessionStorage(nextId, now, options.cookieDomain);
+        touchSessionStorage(nextId, now);
     }
     catch (_c) {
         // storage unavailable
     }
     return nextId;
-}
-/** Test-only: drops the in-memory tier so specs start from a clean slate. */
-function resetSessionMemory() {
-    memorySessionId = null;
-    memoryLastActivity = 0;
-    hostOnlyCookiesCleared = false;
 }
 
 
@@ -11231,22 +10807,20 @@ function dset(obj, keys, val) {
 "use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   "default": () => (__WEBPACK_DEFAULT_EXPORT__)
+/* harmony export */   "default": () => (/* binding */ api)
 /* harmony export */ });
-/*! js-cookie v3.0.1 | MIT */
-/* eslint-disable no-var */
+/*! js-cookie v3.0.7 | MIT */
 function assign (target) {
   for (var i = 1; i < arguments.length; i++) {
     var source = arguments[i];
     for (var key in source) {
+      if (key === '__proto__') continue
       target[key] = source[key];
     }
   }
   return target
 }
-/* eslint-enable no-var */
 
-/* eslint-disable no-var */
 var defaultConverter = {
   read: function (value) {
     if (value[0] === '"') {
@@ -11261,12 +10835,9 @@ var defaultConverter = {
     )
   }
 };
-/* eslint-enable no-var */
 
-/* eslint-disable no-var */
-
-function init (converter, defaultAttributes) {
-  function set (key, value, attributes) {
+function init(converter, defaultAttributes) {
+  function set(name, value, attributes) {
     if (typeof document === 'undefined') {
       return
     }
@@ -11280,7 +10851,7 @@ function init (converter, defaultAttributes) {
       attributes.expires = attributes.expires.toUTCString();
     }
 
-    key = encodeURIComponent(key)
+    name = encodeURIComponent(name)
       .replace(/%(2[346B]|5E|60|7C)/g, decodeURIComponent)
       .replace(/[()]/g, escape);
 
@@ -11307,11 +10878,11 @@ function init (converter, defaultAttributes) {
     }
 
     return (document.cookie =
-      key + '=' + converter.write(value, key) + stringifiedAttributes)
+      name + '=' + converter.write(value, name) + stringifiedAttributes)
   }
 
-  function get (key) {
-    if (typeof document === 'undefined' || (arguments.length && !key)) {
+  function get(name) {
+    if (typeof document === 'undefined' || (arguments.length && !name)) {
       return
     }
 
@@ -11324,25 +10895,26 @@ function init (converter, defaultAttributes) {
       var value = parts.slice(1).join('=');
 
       try {
-        var foundKey = decodeURIComponent(parts[0]);
-        jar[foundKey] = converter.read(value, foundKey);
-
-        if (key === foundKey) {
+        var found = decodeURIComponent(parts[0]);
+        if (!(found in jar)) jar[found] = converter.read(value, found);
+        if (name === found) {
           break
         }
-      } catch (e) {}
+      } catch (e) {
+        // Do nothing...
+      }
     }
 
-    return key ? jar[key] : jar
+    return name ? jar[name] : jar
   }
 
   return Object.create(
     {
       set: set,
       get: get,
-      remove: function (key, attributes) {
+      remove: function (name, attributes) {
         set(
-          key,
+          name,
           '',
           assign({}, attributes, {
             expires: -1
@@ -11364,9 +10936,8 @@ function init (converter, defaultAttributes) {
 }
 
 var api = init(defaultConverter, { path: '/' });
-/* eslint-enable no-var */
 
-/* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (api);
+
 
 
 /***/ }),
