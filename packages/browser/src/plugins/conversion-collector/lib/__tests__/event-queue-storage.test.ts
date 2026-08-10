@@ -5,6 +5,7 @@ import {
   getTabQueueStorageKey,
   MAX_PERSISTED_EVENTS,
   readPersistedEventQueue,
+  TAB_OWNER_STORAGE_KEY,
   writePersistedEventQueue,
 } from '../event-queue-storage'
 
@@ -37,6 +38,13 @@ describe('event-queue-storage', () => {
     const events = [sampleEvent('1'), sampleEvent('2')]
     writePersistedEventQueue(events)
     expect(readPersistedEventQueue()).toEqual(events)
+  })
+
+  it('uses a stable owner across reloads in the same tab', () => {
+    const owner = window.sessionStorage.getItem(TAB_OWNER_STORAGE_KEY)
+
+    expect(owner).toBeTruthy()
+    expect(getTabQueueStorageKey()).toBe(`utua_event_queue::${owner}`)
   })
 
   it('clears storage when queue is empty', () => {

@@ -18,6 +18,7 @@ export const EVENT_QUEUE_STORAGE_KEY = 'utua_event_queue'
  * to REMOVE delivered events; merging would resurrect them.
  */
 const QUEUE_KEY_PREFIX = 'utua_event_queue::'
+export const TAB_OWNER_STORAGE_KEY = 'utua_event_queue_tab_owner'
 
 export const MAX_PERSISTED_EVENTS = 100
 export const MAX_PERSISTED_BYTES = 1024 * 1024
@@ -38,7 +39,28 @@ const MAX_ADOPTED_QUEUES = 20
 const QUEUE_MUTEX_KEY = 'utua_event_queue_lock'
 const LOCK_TIMEOUT_MS = 50
 const MAX_LOCK_ATTEMPTS = 3
-const TAB_LOCK_OWNER = `${Date.now()}-${Math.random()}`
+
+function getStableTabOwner(): string {
+  const fallback = `${Date.now()}-${Math.random()}`
+
+  try {
+    const existingOwner = window.sessionStorage.getItem(TAB_OWNER_STORAGE_KEY)
+    if (existingOwner) {
+      return existingOwner
+    }
+
+    window.sessionStorage.setItem(TAB_OWNER_STORAGE_KEY, fallback)
+  } catch {
+    // If sessionStorage is blocked, persistence is already unavailable in the
+    // affected browser, so a per-load owner is the safest fallback.
+  }
+
+  return fallback
+}
+
+// sessionStorage survives reloads in the same tab, allowing a new SDK instance
+// to hydrate the previous queue immediately instead of waiting for orphan TTL.
+const TAB_LOCK_OWNER = getStableTabOwner()
 const TAB_QUEUE_KEY = `${QUEUE_KEY_PREFIX}${TAB_LOCK_OWNER}`
 
 /** Storage key this tab persists to. Exposed for tests and diagnostics. */
