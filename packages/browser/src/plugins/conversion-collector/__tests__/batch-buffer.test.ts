@@ -208,4 +208,39 @@ describe('BatchBuffer resilient transport', () => {
     expect(buffer.isRunning()).toBe(true)
     buffer.stop()
   })
+
+  it('serializes normal and unload flushes', async () => {
+    let releaseFetch!: (response: Response) => void
+    const fetchMock = jest.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          releaseFetch = resolve
+        })
+    )
+    global.fetch = fetchMock as typeof fetch
+    const beaconMock = jest.fn(() => true)
+    Object.defineProperty(navigator, 'sendBeacon', {
+      value: beaconMock,
+      configurable: true,
+    })
+
+    const buffer = createBuffer()
+    buffer.enqueue(sampleEvent({ messageId: 'normal' }))
+    const normalFlush = buffer.flush()
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+    buffer.enqueue(sampleEvent({ messageId: 'unload' }))
+    const unloadFlush = buffer.flushAll({ unload: true })
+
+    expect(beaconMock).not.toHaveBeenCalled()
+
+    releaseFetch({ ok: true, status: 200, headers: new Headers() } as Response)
+    await normalFlush
+    await unloadFlush
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(beaconMock).toHaveBeenCalledTimes(1)
+    expect(buffer.getSize()).toBe(0)
+  })
 })

@@ -62,7 +62,7 @@ function byteLength(body: string): number {
 export class BatchBuffer {
   private queue: CollectEvent[] = []
   private timer: ReturnType<typeof setInterval> | null = null
-  private flushing = false
+  private flushSequence: Promise<void> = Promise.resolve()
 
   constructor(private readonly config: BatchBufferConfig) {
     this.hydrateFromStorage()
@@ -140,6 +140,21 @@ export class BatchBuffer {
 
   private peekBatch(maxSize = this.config.batchSize): CollectEvent[] {
     return this.queue.slice(0, maxSize)
+  }
+
+  /**
+   * Serialize every delivery path, including unload flushes. A boolean lock is
+   * not enough because flushAll() can otherwise start while flush() is waiting
+   * on the network.
+   */
+  private withFlushLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.flushSequence
+    let release!: () => void
+    this.flushSequence = new Promise<void>((resolve) => {
+      release = resolve
+    })
+
+    return previous.then(operation).finally(release)
   }
 
   private removeBatch(count: number): void {
@@ -236,11 +251,14 @@ export class BatchBuffer {
   }
 
   async flush(): Promise<void> {
-    if (this.flushing || this.queue.length === 0) {
+    return this.withFlushLock(() => this.flushLocked())
+  }
+
+  private async flushLocked(): Promise<void> {
+    if (this.queue.length === 0) {
       return
     }
 
-    this.flushing = true
     const batch = this.peekBatch()
     const batchSize = batch.length
     let delivered = false
@@ -261,7 +279,6 @@ export class BatchBuffer {
       this.bumpRetryInPlace(batchSize)
       throw error
     } finally {
-      this.flushing = false
       // Drain the whole backlog instead of one batch per interval tick — but
       // only after a successful send. Chaining after a failure would retry as
       // fast as the event loop allows, and against an endpoint rejecting
@@ -282,6 +299,10 @@ export class BatchBuffer {
    * life. The plugin's `unload()` owns `stop()`.
    */
   async flushAll(options?: { unload?: boolean }): Promise<void> {
+    return this.withFlushLock(() => this.flushAllLocked(options))
+  }
+
+  private async flushAllLocked(options?: { unload?: boolean }): Promise<void> {
     const syncPersist = options?.unload === true
 
     while (this.queue.length > 0) {
