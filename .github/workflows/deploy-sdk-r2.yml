@@ -1,0 +1,62 @@
+name: Deploy Conversion SDK to R2
+
+# Secrets: CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN (R2 Write on bucket utua)
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'packages/browser/**'
+      - 'packages/core/**'
+      - 'packages/page-tools/**'
+      - 'packages/generic-utils/**'
+      - 'script/**'
+      - '.github/workflows/deploy-sdk-r2.yml'
+
+concurrency:
+  group: deploy-sdk-r2
+  cancel-in-progress: false
+
+env:
+  HUSKY: 0
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+jobs:
+  deploy:
+    name: Build + upload cp-sdk to R2
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install dependencies (yarn immutable)
+        run: yarn install --immutable
+
+      - name: Build browser SDK dependencies
+        run: yarn turbo run --filter=@segment/analytics-next^... build
+
+      - name: Build conversion SDK
+        run: yarn workspace @segment/analytics-next build:conversion-sdk
+
+      - name: Upload cp-sdk bundles to Cloudflare R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          for file in cp-sdk.build.min.js cp-sdk.build.js; do
+            if [ ! -f "script/${file}" ]; then
+              echo "::error::Missing script/${file} after build"
+              exit 1
+            fi
+
+            npx --yes wrangler@3 r2 object put "utua/js/${file}" \
+              --file="script/${file}" \
+              --content-type="application/javascript; charset=utf-8" \
+              --account-id="${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+          done
