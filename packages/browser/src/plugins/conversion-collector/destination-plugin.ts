@@ -10,6 +10,15 @@ const DEFAULT_FLUSH_INTERVAL_MS = 3000
 const DEFAULT_BATCH_SIZE = 10
 const DEFAULT_RETRY_ATTEMPTS = 2
 
+/**
+ * Flushes on the events that precede a page going away, and re-arms the
+ * periodic flush when it comes back.
+ *
+ * `visibilitychange` fires on an ordinary tab switch, not just on navigation,
+ * so hiding is not the end of the page's life — the buffer has to keep
+ * draining after the user returns. `pageshow` covers the bfcache restore,
+ * where the page resumes without ever running `load()` again.
+ */
 function registerUnloadFlush(buffer: BatchBuffer): () => void {
   if (
     typeof window === 'undefined' ||
@@ -20,21 +29,29 @@ function registerUnloadFlush(buffer: BatchBuffer): () => void {
   }
 
   const flushOnUnload = () => {
-    void buffer.flushAll({ unload: true })
+    void buffer.flushAll({ unload: true }).catch(() => undefined)
+  }
+
+  const resume = () => {
+    buffer.start()
   }
 
   const onVisibilityChange = () => {
     if (document.visibilityState === 'hidden') {
       flushOnUnload()
+    } else {
+      resume()
     }
   }
 
   document.addEventListener('visibilitychange', onVisibilityChange)
   window.addEventListener('pagehide', flushOnUnload)
+  window.addEventListener('pageshow', resume)
 
   return () => {
     document.removeEventListener('visibilitychange', onVisibilityChange)
     window.removeEventListener('pagehide', flushOnUnload)
+    window.removeEventListener('pageshow', resume)
   }
 }
 
@@ -45,6 +62,8 @@ export function conversionCollectorPlugin(
     endpoint: settings.endpoint,
     headers: settings.headers,
     retryAttempts: settings.retryAttempts ?? DEFAULT_RETRY_ATTEMPTS,
+    maxEventRetries: settings.maxEventRetries,
+    onDrop: settings.onDrop,
     flushIntervalMs: settings.flushIntervalMs ?? DEFAULT_FLUSH_INTERVAL_MS,
     batchSize: settings.batchSize ?? DEFAULT_BATCH_SIZE,
   })
@@ -100,6 +119,9 @@ export function conversionCollectorPlugin(
     unload: () => {
       removeUnloadListeners?.()
       removeUnloadListeners = undefined
+      // This is the one place the buffer is really done — `flushAll` no longer
+      // stops the timer itself, because it also runs on plain tab switches.
+      buffer.stop()
       return buffer.flushAll({ unload: true }).then(() => undefined)
     },
     track: (ctx) => deliver(ctx, false),

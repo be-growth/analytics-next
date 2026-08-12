@@ -2,15 +2,17 @@ import { PluginType } from '@segment/analytics-core'
 import { Context } from '../../../core/context'
 import { Plugin } from '../../../core/plugin'
 import type { ConversionCollectorSettings } from '../types'
-import { getOrCreateSessionId } from './session-manager'
+import { resolveSessionId } from './resolve-session-id'
 
 export function sessionEnrichment(
   settings: ConversionCollectorSettings
 ): Plugin {
-  let currentSessionId = ''
-
   const enrich = (ctx: Context): Context => {
-    currentSessionId = settings.getSessionId?.() ?? getOrCreateSessionId()
+    const currentSessionId = resolveSessionId(settings, (received) =>
+      ctx.log('warn', 'getSessionId returned an invalid session id', {
+        received,
+      })
+    )
 
     const evtCtx = ctx.event.context ?? {}
     ctx.updateEvent('context', {
@@ -36,9 +38,11 @@ export function sessionEnrichment(
   }
 }
 
+export { resolveSessionId } from './resolve-session-id'
 export { getOrCreateSessionId } from './session-manager'
 export {
   SESSION_COOKIE,
   ACTIVITY_COOKIE,
   SESSION_INACTIVITY_MS,
+  resetSessionMemory,
 } from './session-manager'

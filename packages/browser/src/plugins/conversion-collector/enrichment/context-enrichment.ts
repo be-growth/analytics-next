@@ -3,7 +3,8 @@ import { Analytics } from '../../../core/analytics'
 import { Context } from '../../../core/context'
 import { Plugin } from '../../../core/plugin'
 import { resolveContext } from '../lib/resolve-context'
-import { getOrCreateAnonymousId, getOrCreateSessionId } from '../lib/session'
+import { getOrCreateAnonymousId } from '../lib/session'
+import { resolveSessionId } from '../session-enrichment/resolve-session-id'
 import type { ConversionCollectorSettings } from '../types'
 
 export function conversionContextEnrichment(
@@ -22,7 +23,11 @@ export function conversionContextEnrichment(
     }
     ctx.updateEvent('anonymousId', bgAnonymousId)
 
-    const sessionId = settings.getSessionId?.() ?? getOrCreateSessionId()
+    const sessionId = resolveSessionId(settings, (received) =>
+      ctx.log('warn', 'getSessionId returned an invalid session id', {
+        received,
+      })
+    )
     const resolved = resolveContext(settings)
 
     const evtCtx = ctx.event.context ?? {}
