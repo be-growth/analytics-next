@@ -30,5 +30,5 @@ POST {endpoint}  →  [ CollectEvent, ... ]
 - **Global:** `window.analytics` (alias `ConversionAnalytics`; `globalName` em `init`)
 - **API MVP:** `init`, `track`, `page`, `identify`
 - **Endpoint padrão:** `/collect`
-- **Session:** `context.sessionId` (cookies `_utua_session` / `_utua_last_activity`, fallback LS, TTL 5min inatividade)
+- **Session:** `context.sessionId` (cookies `_utua_session` / `_utua_last_activity`, fallback localStorage, TTL 30min inatividade). Quando o host precisa do session id antes do SDK assíncrono, o bundle standalone `session-manager.min.js` (`window.UtuaSession` + `window.UTUA_SESSION_ID`) compartilha a mesma implementação/estado.
 - **Atribuição:** UTMs em `context.campaign` (env-enrichment); click-ids em `context.campaign` (click-id-enrichment)

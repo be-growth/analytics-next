@@ -42,13 +42,111 @@ export function assertSdkBundleExists(): void {
   }
 }
 
+export type PersistedQueueEvent = {
+  event?: string
+  messageId?: string
+}
+
+/**
+ * Reads the queue the conversion SDK persists to localStorage. The SDK keeps a
+ * per-tab queue under `utua_event_queue::<owner>` (envelope `{ owner,
+ * updatedAt, events }`) and still adopts the legacy single key
+ * `utua_event_queue` (bare array) on boot, so both are accounted for. Runs in
+ * the browser context via page.evaluate — must stay self-contained.
+ */
+export function readPersistedQueueEvents(): PersistedQueueEvent[] {
+  const events: PersistedQueueEvent[] = []
+  const seen = new Set<string>()
+
+  const push = (value: unknown): void => {
+    if (!value || typeof value !== 'object') return
+    const item = value as { event?: unknown; messageId?: unknown }
+    const id = typeof item.messageId === 'string' ? item.messageId : undefined
+    if (id) {
+      if (seen.has(id)) return
+      seen.add(id)
+    }
+    events.push({
+      event: typeof item.event === 'string' ? item.event : undefined,
+      messageId: id,
+    })
+  }
+
+  const pushStored = (raw: string | null): void => {
+    if (!raw) return
+    try {
+      const parsed = JSON.parse(raw) as unknown
+      if (Array.isArray(parsed)) {
+        parsed.forEach(push)
+        return
+      }
+      if (parsed && typeof parsed === 'object') {
+        const envelope = parsed as { events?: unknown }
+        if (Array.isArray(envelope.events)) {
+          envelope.events.forEach(push)
+        }
+      }
+    } catch {
+      // malformed value — nothing to recover
+    }
+  }
+
+  for (let i = 0; i < window.localStorage.length; i += 1) {
+    const key = window.localStorage.key(i)
+    if (key && key.startsWith('utua_event_queue::')) {
+      pushStored(window.localStorage.getItem(key))
+    }
+  }
+  pushStored(window.localStorage.getItem('utua_event_queue'))
+
+  return events
+}
+
+/** True when the SDK has a non-empty queue persisted in localStorage. */
+export function hasPersistedQueueEvents(): boolean {
+  const hasEvents = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object') return false
+    if (Array.isArray(value)) return value.length > 0
+    const envelope = value as { events?: unknown }
+    return Array.isArray(envelope.events) && envelope.events.length > 0
+  }
+  const hasStored = (raw: string | null): boolean => {
+    if (!raw) return false
+    try {
+      return hasEvents(JSON.parse(raw))
+    } catch {
+      return false
+    }
+  }
+
+  for (let i = 0; i < window.localStorage.length; i += 1) {
+    const key = window.localStorage.key(i)
+    if (key && key.startsWith('utua_event_queue::')) {
+      if (hasStored(window.localStorage.getItem(key))) return true
+    }
+  }
+  return hasStored(window.localStorage.getItem('utua_event_queue'))
+}
+
+/** True when no queue key (per-tab or legacy) remains in localStorage. */
+export function hasNoPersistedQueueKeys(): boolean {
+  for (let i = 0; i < window.localStorage.length; i += 1) {
+    const key = window.localStorage.key(i)
+    if (!key) continue
+    if (key.startsWith('utua_event_queue::') || key === 'utua_event_queue') {
+      return false
+    }
+  }
+  return true
+}
+
 export async function setupCollectMock(
   page: Page,
   onCollect?: (body: CollectBody) => void
 ): Promise<{ bodies: CollectBody[] }> {
   const bodies: CollectBody[] = []
 
-  await page.route('**/collector', async (route: Route) => {
+  await page.route('**/v1/conversion/collect', async (route: Route) => {
     const request = route.request()
     if (request.method() !== 'POST') {
       return route.continue()

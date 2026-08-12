@@ -16,6 +16,12 @@ import { getOrCreateSessionId } from './session-manager'
  * continue. A host override that throws would therefore ship every event to the
  * collector with no `context.sessionId` at all — silently, and for that whole
  * site. This function must never throw.
+ *
+ * The cookie-backed tier gets the same defense: `getOrCreateSessionId` may
+ * delegate to a standalone `window.UtuaSession` bundle that is not this code, so
+ * its return value is validated before being trusted. An invalid id or a thrown
+ * error is downgraded to a freshly generated UUID v4 so the event still carries
+ * a session.
  */
 export function resolveSessionId(
   settings: ConversionCollectorSettings,
@@ -34,12 +40,18 @@ export function resolveSessionId(
   }
 
   try {
-    return getOrCreateSessionId({ cookieDomain: settings.sessionCookieDomain })
+    const managed = getOrCreateSessionId({
+      cookieDomain: settings.sessionCookieDomain,
+    })
+    if (isValidUuidV4(managed)) {
+      return managed
+    }
+    onInvalidOverride?.(`session manager returned an invalid id: ${managed}`)
   } catch (error) {
     // Last resort: a session-less event is invisible downstream (the
     // session_profiles materialized views filter `session_id != ''`), so an
     // ephemeral id is strictly better than none.
     onInvalidOverride?.(`session manager threw: ${String(error)}`)
-    return generateUuidV4()
   }
+  return generateUuidV4()
 }

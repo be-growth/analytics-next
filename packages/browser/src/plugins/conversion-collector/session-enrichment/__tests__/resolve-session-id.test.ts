@@ -1,7 +1,7 @@
 import { isValidUuidV4 } from '../../lib/uuid'
 import type { ConversionCollectorSettings } from '../../types'
 import { resolveSessionId } from '../resolve-session-id'
-import { resetSessionMemory } from '../session-manager'
+import { resetSessionMemory, SESSION_COOKIE } from '../session-manager'
 
 const baseSettings: ConversionCollectorSettings = { endpoint: '/collector' }
 
@@ -70,5 +70,69 @@ describe('resolveSessionId', () => {
     expect(onInvalid).toHaveBeenCalledWith(
       expect.stringContaining('host blew up')
     )
+  })
+})
+
+describe('resolveSessionId — delegated session manager defense', () => {
+  const windowWithUtua = window as unknown as {
+    UtuaSession?: Record<string, unknown>
+  }
+
+  beforeEach(() => {
+    resetSessionMemory()
+    window.localStorage.clear()
+  })
+
+  afterEach(() => {
+    delete windowWithUtua.UtuaSession
+  })
+
+  it('regenerates when the session manager returns an invalid id', () => {
+    const onInvalid = jest.fn()
+    windowWithUtua.UtuaSession = {
+      getOrCreateSessionId: () => 'legacy-session-42',
+      getCurrentSessionId: () => 'legacy-session-42',
+    }
+
+    const resolved = resolveSessionId(baseSettings, onInvalid)
+    expect(isValidUuidV4(resolved)).toBe(true)
+    expect(resolved).not.toBe('legacy-session-42')
+    expect(onInvalid).toHaveBeenCalledWith(
+      'session manager returned an invalid id: legacy-session-42'
+    )
+  })
+
+  it('regenerates when the session manager throws', () => {
+    const onInvalid = jest.fn()
+    windowWithUtua.UtuaSession = {
+      getOrCreateSessionId: () => {
+        throw new Error('manager exploded')
+      },
+      getCurrentSessionId: () => 'legacy-session-42',
+    }
+
+    const resolved = resolveSessionId(baseSettings, onInvalid)
+    expect(isValidUuidV4(resolved)).toBe(true)
+    expect(onInvalid).toHaveBeenCalledWith(
+      'session manager threw: Error: manager exploded'
+    )
+  })
+
+  it('forwards sessionCookieDomain to the local manager', () => {
+    const writes: string[] = []
+    Object.defineProperty(document, 'cookie', {
+      configurable: true,
+      get: () => '',
+      set: (value: string) => {
+        writes.push(value)
+      },
+    })
+
+    resolveSessionId({ ...baseSettings, sessionCookieDomain: '.utua.work' })
+
+    const sessionWrite = writes.find(
+      (w) => w.startsWith(`${SESSION_COOKIE}=`) && !w.includes('max-age=0')
+    )
+    expect(sessionWrite).toContain('; domain=.utua.work')
   })
 })

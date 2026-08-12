@@ -11,7 +11,7 @@
       window.analytics = window.analytics || { queue: [] }
       window.analytics.writeKey = 'conversion-pipeline'
       window.analytics.config = {
-        endpoint: '/collect',
+        endpoint: '/v1/conversion/collect',
         appName: 'e2e-lp',
         flushIntervalMs: 2000,
         batchSize: 10,
