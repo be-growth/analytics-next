@@ -58,6 +58,17 @@ function getCookie(name: string): string | null {
   }
 }
 
+/**
+ * `; Secure` on https so the cookie is never sent over cleartext. Deletions must
+ * carry the same attribute as the original write, or the browser keeps the
+ * secure cookie around while the plain deletion silently no-ops.
+ */
+function secureAttribute(): string {
+  return typeof window !== 'undefined' && window.location?.protocol === 'https:'
+    ? '; Secure'
+    : ''
+}
+
 function setCookie(
   name: string,
   value: string,
@@ -68,15 +79,11 @@ function setCookie(
     return
   }
   const maxAge = Math.max(1, Math.ceil(maxAgeSeconds))
-  const secure =
-    typeof window !== 'undefined' && window.location?.protocol === 'https:'
-      ? '; Secure'
-      : ''
   const domainAttr = domain ? `; domain=${domain}` : ''
   try {
     document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(
       value
-    )}; path=/${domainAttr}; max-age=${maxAge}; SameSite=Lax${secure}`
+    )}; path=/${domainAttr}; max-age=${maxAge}; SameSite=Lax${secureAttribute()}`
   } catch {
     // cookies blocked
   }
@@ -97,7 +104,7 @@ function clearHostOnlyCookies(): void {
     for (const name of [SESSION_COOKIE, ACTIVITY_COOKIE]) {
       document.cookie = `${encodeURIComponent(
         name
-      )}=; path=/; max-age=0; SameSite=Lax`
+      )}=; path=/; max-age=0; SameSite=Lax${secureAttribute()}`
     }
   } catch {
     // cookies blocked
@@ -180,7 +187,48 @@ function readSessionPair(): {
   return { sessionId: null, lastActivity: 0 }
 }
 
+/**
+ * Shape of the standalone `window.UtuaSession` global (session-manager bundle).
+ * Only the two functions are required for delegation; the constants are optional.
+ */
+interface ExternalSessionManager {
+  getOrCreateSessionId: (options?: SessionIdOptions | (() => string)) => string
+  getCurrentSessionId: () => string | undefined
+}
+
+/**
+ * Returns the external `window.UtuaSession` when it is a well-formed instance
+ * (both functions present). Lets the SDK bundle share the session state minted
+ * by the standalone session-manager bundle instead of keeping a second,
+ * independent fallback when cookies/localStorage are blocked.
+ */
+function getExternalSessionManager(): ExternalSessionManager | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  const global = window as unknown as {
+    UtuaSession?: Partial<ExternalSessionManager>
+  }
+  const external = global.UtuaSession
+  if (
+    external &&
+    typeof external.getOrCreateSessionId === 'function' &&
+    typeof external.getCurrentSessionId === 'function'
+  ) {
+    return external as ExternalSessionManager
+  }
+  return null
+}
+
 export function getCurrentSessionId(): string | undefined {
+  // Delegate to the standalone global unless it is our own instance (the
+  // session-manager bundle exposes the very function running here — delegating
+  // then would recurse forever).
+  const external = getExternalSessionManager()
+  if (external && external.getCurrentSessionId !== getCurrentSessionId) {
+    return external.getCurrentSessionId()
+  }
+
   if (typeof window === 'undefined') {
     return undefined
   }
@@ -204,6 +252,13 @@ export function getOrCreateSessionId(
     typeof optionsOrCustom === 'function'
       ? { custom: optionsOrCustom }
       : optionsOrCustom ?? {}
+
+  // Delegate to the standalone global, forwarding the caller's options, unless
+  // it is our own instance (same function reference) — that would recurse.
+  const external = getExternalSessionManager()
+  if (external && external.getOrCreateSessionId !== getOrCreateSessionId) {
+    return external.getOrCreateSessionId(optionsOrCustom)
+  }
 
   if (options.custom) {
     return options.custom()

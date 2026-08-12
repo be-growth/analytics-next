@@ -41,6 +41,9 @@ test.describe('Conversion SDK — session flow', () => {
     await page.addInitScript(() => {
       const SESSION_COOKIE = '_utua_session'
       const ACTIVITY_COOKIE = '_utua_last_activity'
+      // Must clearly exceed the 30-minute inactivity TTL
+      // (SESSION_INACTIVITY_MS) or the SDK reuses the existing session and
+      // rotation never happens.
       const stale = String(Date.now() - 31 * 60 * 1000)
       document.cookie = `${SESSION_COOKIE}=550e8400-e29b-41d4-a716-446655440099; path=/; max-age=3600; SameSite=Lax`
       document.cookie = `${ACTIVITY_COOKIE}=${stale}; path=/; max-age=3600; SameSite=Lax`

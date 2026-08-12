@@ -15,6 +15,7 @@
       window.analytics = window.analytics || { queue: [] }
       window.analytics.writeKey = 'conversion-pipeline'
       window.analytics.config = {
+        endpoint: '/v1/conversion/collect',
         appName: 'wire-contract',
         flushIntervalMs: 2000,
         batchSize: 10,

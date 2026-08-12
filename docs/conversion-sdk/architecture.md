@@ -26,7 +26,7 @@
     │   │   └── gclid/fbclid/ttclid/msclkid → context.campaign
     │   │
     │   ├── [session-enrichment] (enrichment)
-    │   │   └── context.sessionId (cookie/localStorage + TTL 5min)
+    │   │   └── context.sessionId (cookie/localStorage + TTL 30min)
     │   │
     │   ├── [Optional enrichments] (before/enrichment)
     │   │   └── consent, context, identify hashing, page taxonomy e GPT
@@ -80,10 +80,17 @@ Ver [backend-contract.md](./backend-contract.md) para spec completa.
 | Fila de eventos | localStorage | `utua_event_queue` |
 
 - **TTL inatividade:** 30 minutos (`SESSION_INACTIVITY_MS`)
-- **Cookie flags:** `SameSite=Lax`, `Secure` (HTTPS), `path=/`; `domain` só quando `sessionCookieDomain` é configurado — sem ele os cookies são host-only e a sessão reinicia a cada troca de subdomínio
-- **Tier de memória:** último recurso quando cookie e localStorage estão bloqueados (Safari privado/ITP, iframe de terceiro, CMP pré-consentimento). Sem ele cada evento cunharia um `sessionId` novo
-- **Carimbo de atividade ausente:** um `sessionId` v4 válido sem `lastActivity` legível é tratado como sessão viva e recebe um novo carimbo, em vez de rotacionar
+- **Cookie max-age:** 45 minutos (`SESSION_COOKIE_MAX_AGE_SEC`), como margem de segurança; a expiração real segue o TTL de inatividade.
+- **Cookie flags:** `SameSite=Lax`, `Secure` (HTTPS), `path=/`; `domain` só quando `sessionCookieDomain` é configurado — sem ele os cookies são host-only e a sessão reinicia a cada troca de subdomínio. Quando o domain é usado, os cookies host-only legados são removidos uma vez por page load, depois que a sessão corrente já foi lida.
+- **Tier de memória:** último recurso quando cookie e localStorage estão bloqueados (Safari privado/ITP, iframe de terceiro, CMP pré-consentimento). Sem ele cada evento cunharia um `sessionId` novo.
+- **Carimbo de atividade ausente:** um `sessionId` v4 válido sem `lastActivity` legível é tratado como sessão viva e recebe um novo carimbo, em vez de rotacionar.
+- **Override `getSessionId`:** validado contra UUID v4 — valores inválidos são descartados com warn e a sessão do cookie assume; nunca lança.
 - **Verificação de expiração:** a cada event handler (sem timer)
+
+Quando o host precisa do `session_id` antes do carregamento assíncrono do SDK, o
+bundle standalone `session-manager.min.js` é carregado de forma síncrona. Ele
+expõe `window.UtuaSession`, inicializa `window.UTUA_SESSION_ID` e usa a mesma
+implementação do SDK; o GPT/SRA consome essa variável no targeting do GAM.
 
 ### Transport & delivery
 

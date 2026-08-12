@@ -14,7 +14,8 @@ import {
  * and verifies the SDK ships the canonical wire payload on the
  * initial page event.
  *
- * Concretely, on the first POST to `/collector`:
+ * Concretely, on the first POST to `/v1/conversion/collect` (the real
+ * collector route):
  *   - `context.sessionId` is present (UUID v4)
  *   - `context.session_id` is absent (the legacy snake_case key is
  *     NOT used by the native SDK — see CLAUDE.md)
@@ -31,7 +32,7 @@ test.beforeAll(() => {
 })
 
 test.describe('browser producer wire contract', () => {
-  test('initial page event emits canonical wire payload to /collector', async ({
+  test('initial page event emits canonical wire payload to /v1/conversion/collect', async ({
     page,
   }) => {
     const captured: CollectBody[] = []
