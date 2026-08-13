@@ -1,0 +1,159 @@
+name: Deploy Conversion SDK to R2
+
+# Secrets:
+#   CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN (R2 Object Write + Zone.Cache Purge)
+# Vars:
+#   R2_BUCKET (fallback: utua)
+#   CLOUDFLARE_SDK_PURGE_TARGETS — comma-separated ZONE_ID=https://assets.host
+#     ZONE_ID must be 32 hex chars (Cloudflare zone id)
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'packages/browser/**'
+      - 'packages/core/**'
+      - 'packages/page-tools/**'
+      - 'packages/generic-utils/**'
+      - 'script/**'
+      - 'package.json'
+      - 'yarn.lock'
+      - '.yarnrc.yml'
+      - '.yarn/patches/**'
+      - '.github/workflows/deploy-sdk-r2.yml'
+      - '.github/workflows/conversion-contract.yml'
+  workflow_dispatch:
+    inputs:
+      skip_purge:
+        description: 'Skip Cloudflare cache purge (emergency only)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-sdk-r2
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: 0
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+  WRANGLER_VERSION: '4.121.0'
+
+jobs:
+  contract-gate:
+    name: Conversion Contract gate
+    uses: ./.github/workflows/conversion-contract.yml
+
+  deploy:
+    name: Build + upload cp-sdk to R2
+    needs: contract-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install dependencies (yarn immutable)
+        run: yarn install --immutable
+
+      - name: Build browser SDK dependencies
+        run: yarn turbo run --filter=@segment/analytics-next^... build
+
+      - name: Build conversion SDK
+        run: yarn workspace @segment/analytics-next build:conversion-sdk
+
+      - name: Checksums (compare with what domains serve)
+        run: sha256sum script/cp-sdk.build.min.js script/cp-sdk.build.js
+
+      - name: Upload cp-sdk bundles to Cloudflare R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          bucket="${R2_BUCKET:-utua}"
+          echo "Uploading to R2 bucket=${bucket} (non-atomic: two sequential puts)"
+
+          for file in cp-sdk.build.min.js cp-sdk.build.js; do
+            if [ ! -f "script/${file}" ]; then
+              echo "::error::Missing script/${file} after build"
+              exit 1
+            fi
+
+            npx --yes "wrangler@${WRANGLER_VERSION}" r2 object put "${bucket}/js/${file}" \
+              --file="script/${file}" \
+              --content-type="application/javascript" \
+              --remote
+          done
+
+      - name: Purge Cloudflare cache per zone
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_purge != true }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_SDK_PURGE_TARGETS: ${{ vars.CLOUDFLARE_SDK_PURGE_TARGETS }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CLOUDFLARE_SDK_PURGE_TARGETS:-}" ]; then
+            echo "::error::Missing repo variable CLOUDFLARE_SDK_PURGE_TARGETS (ZONE_ID=https://assets.host,...)."
+            echo "Without per-zone purge, R2 upload does not reach cached assets.utua.* hosts (AU-218)."
+            exit 1
+          fi
+
+          files=(js/cp-sdk.build.min.js js/cp-sdk.build.js)
+          IFS=',' read -ra targets <<< "${CLOUDFLARE_SDK_PURGE_TARGETS}"
+          purged=0
+
+          for target in "${targets[@]}"; do
+            target="$(echo "${target}" | xargs)"
+            [ -z "${target}" ] && continue
+
+            zone_id="${target%%=*}"
+            base_url="${target#*=}"
+            base_url="${base_url%/}"
+
+            if [ -z "${zone_id}" ] || [ -z "${base_url}" ] || [ "${zone_id}" = "${target}" ]; then
+              echo "::error::Invalid CLOUDFLARE_SDK_PURGE_TARGETS entry: '${target}' (expected ZONE_ID=https://host)"
+              exit 1
+            fi
+
+            if ! echo "${zone_id}" | grep -Eq '^[0-9a-f]{32}$'; then
+              echo "::error::Invalid zone id ${zone_id} (expected 32 hex chars). Placeholder values are not allowed."
+              exit 1
+            fi
+
+            urls='['
+            first=1
+            for file in "${files[@]}"; do
+              if [ "${first}" -eq 1 ]; then first=0; else urls+=','; fi
+              urls+="\"${base_url}/${file}\""
+            done
+            urls+=']'
+
+            echo "Purging zone=${zone_id} urls=${urls}"
+            response="$(curl -sS -X POST \
+              "https://api.cloudflare.com/client/v4/zones/${zone_id}/purge_cache" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data "{\"files\":${urls}}")"
+
+            if ! echo "${response}" | grep -q '"success":true'; then
+              echo "::error::Cache purge failed for zone ${zone_id}: ${response}"
+              exit 1
+            fi
+            echo "Purge ok for zone ${zone_id}"
+            purged=$((purged + 1))
+          done
+
+          if [ "${purged}" -lt 1 ]; then
+            echo "::error::No zones purged. Check CLOUDFLARE_SDK_PURGE_TARGETS."
+            exit 1
+          fi
+          echo "Purged ${purged} zone(s)"

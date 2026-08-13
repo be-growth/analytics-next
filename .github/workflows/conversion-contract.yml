@@ -22,6 +22,8 @@ name: Conversion Contract
 on:
   pull_request:
     branches: [master]
+  # Reused as a required gate before R2 publish (deploy-sdk-r2.yml).
+  workflow_call:
 
 # PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD is set so the immutable install step
 # does not try to fetch browsers we don't need for the collector job.
