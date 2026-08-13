@@ -4,6 +4,40 @@
 
 ### Minor Changes
 
+- [`4f206595`](https://github.com/segmentio/analytics-next/commit/4f206595a93af97b0ce01e3bfd9139b136bb913a) Thanks [@furtadosamuel](https://github.com/furtadosamuel)! - Add Lotame Analytics enrichment support for the Conversion SDK.
+
+### Patch Changes
+
+- [`d09b7920`](https://github.com/segmentio/analytics-next/commit/d09b79209c53e7ff1030bb17af0e42f973813cd6) Thanks [@JeisielRamosOliveira](https://github.com/JeisielRamosOliveira)! - fix(conversion-collector): stamp context.app.name and context.library on the always-on native pipeline so app_name and sdk_version reach the collector without enabling context enrichment (AU-165)
+
+* [`329025bc`](https://github.com/segmentio/analytics-next/commit/329025bce578db25c4d4eb3bf1ba114b305e456e) - fix(conversion-collector): stop losing events to a stalled or dead delivery queue
+
+  Four defects could each drop every event from a browser, not just a percentage of them:
+
+  - a non-retryable response (4xx) left the batch at the head of the queue forever, so a single 400/403/413 — a WAF rule, an expired token, an oversized payload — ended collection for that browser permanently, surviving reloads because the queue is persisted. Rejected batches are now discarded and reported through the new `onDrop` callback, and a retry ceiling (`maxEventRetries`, default 10) keeps a repeatedly failing batch from blocking the queue behind it.
+  - `flushAll` stopped the flush interval, but it also runs on `visibilitychange -> hidden`, which fires on a plain tab switch. After the first time the user switched away, the periodic flush never ran again. `stop()` now belongs to the plugin's `unload()`, and `visibilitychange -> visible` / `pageshow` re-arm the buffer.
+  - every tab wrote the same `localStorage` key with its own in-memory queue, so the last writer erased whatever the other tab had pending. Each tab now owns its queue key; queues left by tabs that are gone are adopted on boot, and the pre-split key is migrated.
+  - the persistence cap trimmed the newest events but the queue drains from the head, so what it actually discarded were the oldest undelivered events — including the entry `page` carrying the campaign attribution. It now trims from the tail and reports what it dropped.
+
+  Also: the unload payload is split into batches within the 64 KB limit that `sendBeacon` and `fetch({keepalive})` both impose (one oversized body was silently failing), the queue drains fully after a successful send instead of one batch per tick, and a failed flush no longer surfaces as an unhandled rejection.
+
+- Bump `js-cookie` to the patched 3.0.7 release to address CVE-2026-46625.
+
+* [`de02a216`](https://github.com/segmentio/analytics-next/commit/de02a21652369cdfda81f473227b583511607103) - Fix Conversion SDK `identify()` sending an empty `user_id`: derive it from BGID trait or SHA-256(email) when the caller doesn't pass an explicit userId. Also tag identify traits with `traits.navec` (and `traits.lotame` when configured) to identify the data source.
+
+- [`88157548`](https://github.com/segmentio/analytics-next/commit/88157548d857c38ff769f8b8d4936a45e3ddf172) - fix(conversion-collector): make the cookie-backed session survive blocked storage, subdomain hops and a missing activity stamp
+
+  - adds an in-memory tier so a page load keeps one `context.sessionId` when cookies and localStorage are both unavailable (Safari private/ITP, third-party iframe, CMP before consent) instead of minting a new id per event
+  - adds the optional `sessionCookieDomain` init option so the session survives subdomain navigation; the legacy host-only cookies are dropped once per page load, after the current session is read
+  - keeps a valid session id when only its `lastActivity` stamp is missing, instead of rotating
+  - validates the host-supplied `getSessionId` override against UUID v4 (the collector rejects anything else with `invalid_session_id`) and never lets it throw an event through without a session
+
+* [`07cd91f3`](https://github.com/segmentio/analytics-next/commit/07cd91f376d38e0361b8ddd1737c1c25e6bff81d) Thanks [@furtadosamuel](https://github.com/furtadosamuel)! - Add twclid click-id enrichment and cover resilient Conversion SDK transport flows.
+
+## 1.84.0
+
+### Minor Changes
+
 - [#1342](https://github.com/segmentio/analytics-next/pull/1342) [`65951526`](https://github.com/segmentio/analytics-next/commit/65951526ddd696d14ca250453ccad48d170dc60a) Thanks [@MichaelGHSeg](https://github.com/MichaelGHSeg)! - Unify and harden HTTP response handling and retry behavior across browser and node SDKs.
 
   - Browser (`@segment/analytics-next`) - Add config-driven response handling for Segment.io delivery (`httpConfig` with rate-limit/backoff controls). - Improve batching/dispatcher retry semantics for 429 and transient failures. - Use configured `protocol` for batching requests when `apiHost` has no scheme, while preserving compatibility for `apiHost` values that already include `http://` or `https://`.
