@@ -28,7 +28,7 @@
     "build-prep": "sh scripts/build-prep.sh",
     "version": "yarn run build-prep && git add src/generated/version.ts",
     "umd": "webpack",
-    "build:conversion-sdk": "NODE_ENV=production webpack --config webpack.conversion-sdk.config.js && node scripts/postbuild-conversion-sdk.cjs && NODE_ENV=development webpack --config webpack.conversion-sdk.config.js && node scripts/sync-script.cjs",
+    "build:conversion-sdk": "NODE_ENV=production webpack --config webpack.conversion-sdk.config.js && node scripts/postbuild-conversion-sdk.cjs && NODE_ENV=production CONVERSION_SDK_UNMINIFIED=1 webpack --config webpack.conversion-sdk.config.js && node scripts/sync-script.cjs",
     "build:conversion-sdk:prod": "NODE_ENV=production webpack --config webpack.conversion-sdk.config.js && node scripts/postbuild-conversion-sdk.cjs && node scripts/sync-script.cjs",
     "sync:script": "node scripts/sync-script.cjs",
     "build:conversion-sdk:dev": "webpack --config webpack.conversion-sdk.config.js",

@@ -5,12 +5,15 @@ const CompressionPlugin = require('compression-webpack-plugin')
 const CircularDependencyPlugin = require('circular-dependency-plugin')
 
 const isProd = process.env.NODE_ENV === 'production'
+const unminified = process.env.CONVERSION_SDK_UNMINIFIED === '1'
+const minify = isProd && !unminified
 const includeGpt = process.env.CONVERSION_INCLUDE_GPT === '1'
 
 /** @type { import('webpack').Configuration } */
 const config = {
   stats: process.env.WATCH === 'true' ? 'errors-warnings' : 'minimal',
   mode: process.env.NODE_ENV || 'development',
+  // Prod builds (min or readable) omit source maps so published URLs do not 404.
   devtool: isProd ? false : 'source-map',
   entry: {
     'conversion-analytics.build': path.resolve(
@@ -19,7 +22,7 @@ const config = {
     ),
   },
   output: {
-    filename: isProd
+    filename: minify
       ? 'conversion-analytics.build.min.js'
       : 'conversion-analytics.build.js',
     path: path.resolve(__dirname, 'dist/umd'),
@@ -50,8 +53,8 @@ const config = {
   },
   optimization: {
     moduleIds: 'deterministic',
-    minimize: isProd,
-    minimizer: isProd
+    minimize: minify,
+    minimizer: minify
       ? [
           new TerserPlugin({
             extractComments: false,
@@ -82,7 +85,7 @@ const config = {
             path.resolve(__dirname, 'src/conversion-sdk/stubs/gpt-stub.ts')
           ),
         ]),
-    ...(isProd ? [new CompressionPlugin({})] : []),
+    ...(minify ? [new CompressionPlugin({})] : []),
   ],
 }
 
